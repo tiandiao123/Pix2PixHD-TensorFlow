@@ -74,7 +74,7 @@ class PairGenerator(object):
             image_index = map[array[random_folder_index]][random_image_id]
 
             random_image_id+=1
-            if random_folder_index>=len(map[array[random_folder_index]]):
+            if random_image_id>=len(map[array[random_folder_index]]):
                 random_folder_index += 1
                 random_image_id  = 0
 
