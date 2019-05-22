@@ -60,22 +60,22 @@ def write_tfrecord_data_paired(out_file_name, hazy_txt_file, clear_txt_file):
     clear_im_names = utils.get_text_file_lines(clear_txt_file)
 
     image_name_pairs = zip(hazy_im_names,clear_im_names)
-    print image_name_pairs
+    print(image_name_pairs)
     shuffle(image_name_pairs)
 
     for hazy_name, clear_name in image_name_pairs:
-      print clear_name
+      print(clear_name)
       hazy_img = np.array(io.imread(hazy_name[:-1])) # [:-1] because \n needs to be removed from the name # convert RGB to BGR im1 = im1[:,:,::-1]
       hazy_img = np.array(np.multiply(transform.resize(hazy_img, [286,286]),255)).astype('uint8')
       clear_img = np.array(io.imread(clear_name[:-1]))
       clear_img = np.array(np.multiply(transform.resize(clear_img, [286,286]),255)).astype('uint8')
-      print type(clear_img[0][0][0])
-      print clear_img.shape
+      print(type(clear_img[0][0][0]))
+      print(clear_img.shape)
       h,w,c = hazy_img.shape
 
       hazy_str = hazy_img.tostring()
       clear_str = clear_img.tostring()
-      print len(clear_str)
+      print(len(clear_str))
       # write the record
       record = tf.train.Example(features=tf.train.Features(feature={
       'h': _int64_feature(h),
@@ -110,7 +110,7 @@ def decode_tfrecord_data_paired(file_name, batch_size_val, out_h, out_w):
     image_shape = tf.stack([h, w, out_channel])    
 
     img1 = tf.reshape(img1_vec, image_shape)
-    print img1.get_shape().as_list()
+    print(img1.get_shape().as_list())
     img1_normed = preprocess_images_tf(img1)
 
     img2 = tf.reshape(img2_vec, image_shape)    
@@ -143,7 +143,7 @@ def write_tfrecord_data(out_file_name, image_names, image_dir): # NOTE! to be us
     writer = tf.python_io.TFRecordWriter(out_file_name)
     shuffle(image_names)
     for image_name in image_names:
-        print image_dir+image_name[0:-1]
+        print(image_dir+image_name[0:-1])
         img = np.array(io.imread(image_dir+image_name[0:-1])) # convert RGB to BGR im1 = im1[:,:,::-1]        
         img = transform.resize(img, [286,286])
         

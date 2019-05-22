@@ -86,16 +86,16 @@ class pix2pix_network(object):
 		# Load the weights into memory: this approach is adopted rather than standard random initialization to allow the
 		# flexibility to load weights from a numpy file or other files.
 		if self.WEIGHTS_PATH:
-			print 'loading initial weights from '+ self.WEIGHTS_PATH
+			print('loading initial weights from '+ self.WEIGHTS_PATH)
 			weights_dict = np.load(self.WEIGHTS_PATH, encoding = 'bytes').item()    
 		# else:
 		# 	print 'loading random weights'
 		# 	weights_dict = get_random_weight_dictionary('pix2pix_initial_weights')
 		# Loop over all layer names stored in the weights dict
 		for op_name in weights_dict:          
-			print op_name
+			print(op_name)
 			with tf.variable_scope(op_name) as scope:  
 				for sub_op_name in weights_dict[op_name]:
 	  				data = weights_dict[op_name][sub_op_name]
-					var = get_scope_variable(name, sub_op_name, shape=[data.shape[0], data.shape[1], data.shape[2], data.shape[3]])
-					session.run(var.assign(data))
+	  				var = get_scope_variable(name, sub_op_name, shape=[data.shape[0], data.shape[1], data.shape[2], data.shape[3]])
+	  				session.run(var.assign(data))

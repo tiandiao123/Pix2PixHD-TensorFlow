@@ -1,5 +1,5 @@
 import tensorflow as tf
-from .pair_generator import PairGenerator, Inputs
+from pair_generator import PairGenerator, Inputs
 import os
 
 

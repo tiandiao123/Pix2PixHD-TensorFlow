@@ -27,14 +27,14 @@ class PairGenerator(object):
         
 
         images_name_map = {}
-        for i in range(start_folder_id, end_folder_id+1):
+        for i in range(self.start_folder_id, self.end_folder_id+1):
             input_map = {}
             target_map = {}
             folder_id = i
-            folder_path = os.path.join(dataroot, folder_id)
+            folder_path = os.path.join(dataroot, str(folder_id))
 
 
-            sub_folder_path = os.path.join(folder_path， 'PNCC')
+            sub_folder_path = os.path.join(folder_path, 'PNCC')
             images = glob.glob(sub_folder_path+"/*.png")
             count_len = len(images)
             images_count[i] = count_len
@@ -45,26 +45,26 @@ class PairGenerator(object):
 
     def get_next_pair(self):
 
-        random_folder_index = end_folder_id
-        random_image_id = self.images_count[end_folder_id]
+        random_folder_index = self.end_folder_id
+        random_image_id = self.images_count[self.end_folder_id]
         count = 6001
         map = {}
-        folder_num = end_folder_id - start_folder_id+1;
+        folder_num = self.end_folder_id - self.start_folder_id+1;
         folder_names = ['PNCC', '3dTex', 'densepose']
-        array = [i for i in range(start_folder_id, end_folder_id+1)]
+        array = [i for i in range(self.start_folder_id, self.end_folder_id+1)]
 
         while True:
             if count >= 6000:
                 map = {}
                 count = 0
-                array = [i for i in range(start_folder_id, end_folder_id+1)]
+                array = [i for i in range(self.start_folder_id, self.end_folder_id+1)]
                 
                 random_folder_index = 0
-                random.suffle(array)
+                random.shuffle(array)
                 for folder_name in array:
                     image_count = self.images_count[folder_name]
-                    temp_array = [i+1 for i in range(images_count-self.frame_count)] 
-                    random.suffle(temp_array)
+                    temp_array = [i+1 for i in range(image_count-self.frame_count)] 
+                    random.shuffle(temp_array)
                     map[folder_name] = temp_array
 
                 count = 0
@@ -83,7 +83,7 @@ class PairGenerator(object):
 
             yield ({'image_index': image_index, 
                     'folder_index': array[random_folder_index], 
-                    'target_image_index': (image_index_index + self.frame_count-1)})
+                    'target_image_index': (image_index + self.frame_count-1)})
 
 
 

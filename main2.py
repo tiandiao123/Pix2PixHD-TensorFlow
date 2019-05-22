@@ -10,8 +10,8 @@ from random import shuffle
 import skimage.io as io
 import os
 import argparse
-from .pair_generator import PairGenerator, Inputs
-from .tf_data import Dataset
+from pair_generator import PairGenerator, Inputs
+# from tf_data import Dataset
 
 curr_path = os.getcwd()
 
@@ -153,11 +153,11 @@ def test(args):
 				raise IOError('In test mode, a checkpoint is expected.')
 			saver.restore(sess, args.checkpoint_name)
 			# Test network
-			print 'generating network output'
+			print('generating network output')
 			for curr_test_image_name in test_image_names:			
 				splits = curr_test_image_name.split('/')
 				splits = splits[len(splits)-1].split('.')
-				print curr_test_image_name
+				print(curr_test_image_name)
 				batch_A,batch_B = load_images_paired(list([curr_test_image_name]),
 					is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
 				fake_B = sess.run(model.generator_output(image_A), 
@@ -243,7 +243,7 @@ def train(args):
 			start_epoch = 0
 			for epoch in range(start_epoch,num_epochs):
 
-				print "{} epoch: {}".format(datetime.now(), epoch)
+				print("{} epoch: {}".format(datetime.now(), epoch))
 				
 				step = 0
 				# Loop over iterations of an epoch
@@ -252,12 +252,12 @@ def train(args):
 				G_loss_GAN_accum = 0.0
 
 				# Test network
-				print 'generating network output'
+				print('generating network output')
 				curr_test_image_name = np.random.choice(test_image_names, 1)
 				batch_A,batch_B = load_images_paired(curr_test_image_name,is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
 				fake_B = sess.run(model.generator_output(image_A), feed_dict=
 					{image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
-				print curr_test_image_name[0][:-4]
+				print(curr_test_image_name[0][:-4])
 				splits = curr_test_image_name[0].split('/')
 				splits = splits[len(splits)-1].split('.')
 				io.imsave(out_dir+splits[0]+'_epoch_'+str(epoch)+'.png',(np.concatenate(((batch_A[0]+1.0)/2.0,(batch_B[0]+1.0)/2.0,(fake_B[0]+1.0)/2.0),axis = 1)))
@@ -278,15 +278,15 @@ def train(args):
 					step += 1			
 				
 				end_time = time.time()
-				print 'elapsed time for epoch '+str(epoch)+' = '+str(end_time-start_time)
+				print('elapsed time for epoch '+str(epoch)+' = '+str(end_time-start_time))
 				epoch = epoch+1
 				G_loss_L1_accum = G_loss_L1_accum/num_iters_per_epoch
 				G_loss_GAN_accum = G_loss_GAN_accum/num_iters_per_epoch
 				D_loss_accum = D_loss_accum/num_iters_per_epoch
 
-				print "G loss L1: "+str(G_loss_L1_accum)
-				print "G loss GAN: "+str(G_loss_GAN_accum)
-				print "D loss: "+str(D_loss_accum)
+				print("G loss L1: "+str(G_loss_L1_accum))
+				print("G loss GAN: "+str(G_loss_GAN_accum))
+				print("D loss: "+str(D_loss_accum))
 
 				# Save the most recent model
 				for f in glob.glob(checkpoint_path+"model_epoch"+str(epoch-1)+"*"):
@@ -299,7 +299,7 @@ def train(args):
 
 
 def test_data_loader(args):
-	generator = PairGenerator()
+	generator = PairGenerator(args)
 	iter = generator.get_next_pair()
 	for i in range(2):
 		res = next(iter)
