@@ -18,9 +18,9 @@ class PairGenerator(object):
         self.end_folder_id = args.sample_ed
         self.frame_count = args.frame_count
         self.mode = args.mode
-        self.images_count = self.get_images_data_stat(lfw_path)
+        self.images_count = self.get_images_data_stat(self.dataroot)
 
-    def get_images_data_stat(self, lfw_path):
+    def get_images_data_stat(self, dataroot):
         # generates a dictionary between a person and all the photos of that person
 
         images_count = {}

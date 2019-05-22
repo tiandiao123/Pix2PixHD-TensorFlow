@@ -25,11 +25,7 @@ NOTE: This script downloads the images provided by the authors of pix2pix which 
 
 3. Train 
 ```
-python main.py \
-  --mode train \
-  --dataset facades \
-  --train_image_path ./datasets/facades/train \
-  --test_image_path ./datasets/facades/val
+python main2.py --dataroot /data1/cuiqingli/data/render_v5/unzipV3 
 ```
 NOTE: For the generator, the U-net encoder-decoder is implemented. For the discriminator, a 70x70 discriminator is implemented. Both these choices have been experimentally proven to be the best compared to some of the alternatives by the authors of pix2pix. Also, as specified in the errata in the [pix2pix paper](https://arxiv.org/pdf/1611.07004.pdf) (Sec.6.3), batchnorm is removed from bottleneck layer. 
 

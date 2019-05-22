@@ -298,14 +298,25 @@ def train(args):
 
 
 
+def test_data_loader(args):
+	generator = PairGenerator()
+	iter = generator.get_next_pair()
+	for i in range(2):
+		res = next(iter)
+		print("image_index: " + str(res['image_index']))
+		print("folder_index: " + str(res['folder_index']))
+		print("target_image_index: " + str(res['target_image_index']))
+
 
 def main(args):
-	if args.mode == 'train':
-		train(args)
-	if args.mode == 'test':
-		test(args)
-	else:
-		raise 'mode input should be train or test.'
+	# if args.mode == 'train':
+	# 	train(args)
+	# if args.mode == 'test':
+	# 	test(args)
+	# else:
+	# 	raise 'mode input should be train or test.'
+
+	test_data_loader(args)
 
 if __name__ == '__main__':
     main(args)
