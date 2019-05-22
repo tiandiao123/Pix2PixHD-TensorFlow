@@ -73,28 +73,6 @@ class PairGenerator(object):
             folder_path = os.path.join(self.dataroot, str(array[random_folder_index]))
             image_index = map[array[random_folder_index]][random_image_id]
 
-
-            images1 = []
-            images2 = []
-            images3 = []
-
-            for i in range(self.frame_count):
-                image_extract_id = image_index + i
-
-                PNCC_folder_path = os.path.join(folder_path, 'PNCC')
-                images1.append(PNCC_folder_path + "/P_" + str(image_extract_id) + ".png")
-
-                dtex_folder_path = os.path.join(folder_path, '3dTex')
-                image2.append(dtex_folder_path + "/t_" + str(image_extract_id) + ".png")
-
-                densepose_folder_path = os.path.join(folder_path, 'densepose')
-                image3.append(densepose_folder_path + "/f_" + str(image_extract_id) + "_IUV.png")
-
-            target_img = ""
-            if self.mode == 'train':
-                face_folder_path = os.path.join(folder_path, 'face')
-                target_img = face_folder_path + "/f_" + str((image_extract_id + self.frame_count -1)) + ".png"
-
             random_image_id+=1
             if random_folder_index>=len(map[array[random_folder_index]]):
                 random_folder_index += 1
