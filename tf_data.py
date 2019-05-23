@@ -1,47 +1,137 @@
 import tensorflow as tf
-from pair_generator import PairGenerator, Inputs
+from tensorflow import Tensor
+# from pair_generator import PairGenerator, Inputs
 import os
+import cv2
+import scipy.misc
+import numpy as np 
+import math
+import glob
+import random
+
+import json
 
 
 class Dataset(object):
-    img1_resized = 'img1_resized'
-    img2_resized = 'img2_resized'
-    label = 'same_person'
-
-    def __init__(self, generator=PairGenerator(), args):
+    def __init__(self, args):
         self.batch_size = args.batch_size
         self.frame_count = args.frame_count
         self.args = args
-        self.next_element = self.build_iterator(generator)
+        self.dataroot = args.dataroot
+        self.bias = 1
+        self.mode = args.mode
 
-    def build_iterator(self, pair_gen: PairGenerator):
+
+        # self.dataroot = args.dataroot
+        self.start_folder_id = args.sample_st
+        self.end_folder_id = args.sample_ed
+        self.frame_count = args.frame_count
+        self.mode = args.mode
+        self.images_count = self.get_images_data_stat(self.dataroot)
+
+        # mygenerator = self.generator
+        
+        self.next_element = self.build_iterator(self.generator)
+
+    def build_iterator(self, pair_gen):
         
         prefetch_batch_buffer = 5
 
-        dataset = tf.data.Dataset.from_generator(pair_gen.get_next_pair,
-                                                 output_types={PairGenerator.image_index: tf.int32,
-                                                               PairGenerator.folder_index: tf.int32,
-                                                               PairGenerator.target_image_index: tf.int32})
+        dataset = tf.data.Dataset.from_generator(pair_gen,
+                                                 output_types=(tf.int64, tf.int64, tf.int64))
         dataset = dataset.map(self._read_image_and_resize)
         dataset = dataset.batch(self.batch_size)
         dataset = dataset.prefetch(prefetch_batch_buffer)
         iter = dataset.make_one_shot_iterator()
-        element1, element2 = iter.get_next()
+        res = iter.get_next()
 
-        return element1, element2
+        return res
 
-    def _read_image_and_resize(self, pair_element):
-        self.IMAGE_WIDTH = self.args.resize_w 
-        self.IMAGE_HEIGHT = self.args.resize_h
 
-        out_x = np.zeros( (IMAGE_HEIGHT, IMAGE_WIDTH, 3*3*self.group_length)) # channel concatenate.
-        out_y = np.zeros( (IMAGE_HEIGHT, IMAGE_WIDTH, 3*self.group_length))
+    def generator(self):
+        random_folder_index = self.end_folder_id
+        random_image_id = self.images_count[self.end_folder_id]
+        count = 6001
+        map = {}
+        folder_num = self.end_folder_id - self.start_folder_id+1;
+        folder_names = ['PNCC', '3dTex', 'densepose']
+        array = [i for i in range(self.start_folder_id, self.end_folder_id+1)]
 
-        image_index = pair_element[PairGenerator.image_index]
-        folder_index = pair_element[PairGenerator.folder_index]
-        target_image_index = pair_element[PairGenerator.target_image_index]
+        while True:
+            if count >= 6000:
+                map = {}
+                count = 0
+                array = [i for i in range(self.start_folder_id, self.end_folder_id+1)]
+                
+                random_folder_index = 0
+                random.shuffle(array)
+                for folder_name in array:
+                    image_count = self.images_count[folder_name]
+                    temp_array = [i+1 for i in range(image_count-self.frame_count)] 
+                    random.shuffle(temp_array)
+                    map[folder_name] = temp_array
 
-        sample_folder_full = os.path.join(self.dataroot, str(target_image_index))
+                count = 0
+                random_image_id = 0
+            count += 1
+            folder_path = os.path.join(self.dataroot, str(array[random_folder_index]))
+            image_index = map[array[random_folder_index]][random_image_id]
+
+            random_image_id+=1
+            if random_image_id>=len(map[array[random_folder_index]]):
+                random_folder_index += 1
+                random_image_id  = 0
+
+            print((image_index, array[random_folder_index], (image_index + self.frame_count-1)))
+            yield image_index, array[random_folder_index], (image_index + self.frame_count-1)
+
+
+
+
+    def get_images_data_stat(self, dataroot):
+        images_count = {}
+        images_name_map = {}
+        for i in range(self.start_folder_id, self.end_folder_id+1):
+            input_map = {}
+            target_map = {}
+            folder_id = i
+            folder_path = os.path.join(dataroot, str(folder_id))
+
+
+            sub_folder_path = os.path.join(folder_path, 'PNCC')
+            images = glob.glob(sub_folder_path+"/*.png")
+            count_len = len(images)
+            images_count[i] = count_len
+
+        return images_count
+
+    def _read_image_and_resize(self, *arguments):
+        
+        print("arguments: ----------------------------------------------------")
+        for i in range(len(arguments)):
+            print(arguments[i])
+
+        image_index = 1
+        folder_index = 1
+        target_image_index = 1
+
+        # print("image_index: ")
+        # print(image_index)
+        # print("folder_index: ")
+        # print(folder_index.numpy())
+        # print("target_image_index: ")
+        # print(target_image_index.numpy())
+
+        IMAGE_WIDTH = self.args.resize_w 
+        IMAGE_HEIGHT = self.args.resize_h
+
+        out_x = np.zeros( (IMAGE_HEIGHT, IMAGE_WIDTH, 3*3*self.frame_count)) # channel concatenate.
+
+        # image_index = pair_element[0]
+        # folder_index = pair_element[1]
+        # target_image_index = pair_element[2]
+
+        sample_folder_full = os.path.join(self.dataroot, str(folder_index))
         crop_h_flag = self.args.crop_h_flag
 
         if crop_h_flag == 20:
@@ -109,19 +199,19 @@ class Dataset(object):
         for i in range(self.frame_count):
             image_extract_id = image_index + i
 
-            PNCC_folder_path = os.path.join(folder_path, 'PNCC')
-            extract_image_path = PNCC_folder_path + "/P_" + str(image_extract_id) + ".png"
+            PNCC_folder_path = os.path.join(sample_folder_full, 'PNCC')
+            extract_image_path = PNCC_folder_path + "/p_" + str(image_extract_id) + ".png"
             out_x[ :, :, i*9:i*9+3] =  read_frame(extract_image_path, crop=not self.args.no_crop, ih=self.args.img_height, iw=self.args.img_width, resize=True, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=self.bias, crop_h_flag=crop_h_flag, args=self.args)
             
 
 
-            dtex_folder_path = os.path.join(folder_path, '3dTex')
+            dtex_folder_path = os.path.join(sample_folder_full, '3dTex')
             extract_image_path = dtex_folder_path + "/t_" + str(image_extract_id) + ".png"
             out_x[ :, :, i*9+3:i*9+6] =  read_frame(extract_image_path, crop=not self.args.no_crop, ih=self.args.img_height, iw=self.args.img_width, resize=True, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=self.bias, crop_h_flag=crop_h_flag, args=self.args)
 
-            densepose_folder_path = os.path.join(folder_path, 'densepose')
+            densepose_folder_path = os.path.join(sample_folder_full, 'densepose')
             extract_image_path = densepose_folder_path + "/f_" + str(image_extract_id) + "_IUV.png"
             out_x[ :, :, i*9+6:i*9+9] =  read_frame(extract_image_path, crop=not self.args.no_crop, ih=self.args.img_height, iw=self.args.img_width, resize=True, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=self.bias, crop_h_flag=crop_h_flag, args=self.args)
@@ -129,15 +219,23 @@ class Dataset(object):
 
         target_img = ""
         if self.mode == 'train':
-            face_folder_path = os.path.join(folder_path, 'face')
+            face_folder_path = os.path.join(sample_folder_full, 'face')
             extract_image_path = face_folder_path + "/f_" + str((image_extract_id + self.frame_count -1)) + ".png"
 
             out_y = read_frame(extract_image_path, crop=not self.args.no_crop, ih=self.args.img_height, iw=self.args.img_width, resize=True, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=self.bias, crop_h_flag=crop_h_flag, args=self.args)
 
-            return out_x, out_y
+            out_x = tf.convert_to_tensor(out_x, np.float32)
+            out_y = tf.convert_to_tensor(out_y, np.float32)
+            #out_x = out_x.eval()
+            #out_y = out_y.eval()
+            return (out_x, out_y)
         else:
-            return out_x
+
+            out_x = tf.convert_to_tensor(out_x, np.float32)
+
+            #out_x = out_x.eval()
+            return (out_x, )
 
         # random_image_id+=1
         # if random_folder_index>=len(map[array[random_folder_index]]):
@@ -170,7 +268,10 @@ class Dataset(object):
 
 
 def read_frame(file_path, crop=False, ih=0, iw=0, resize=False, rh=0, rw=0, norm=True, bias=1, crop_h_flag=0, args=None):
-    f = scipy.misc.imread(file_path)
+    print(file_path)
+    f = cv2.imread(file_path)
+    f = np.array(f)
+    f = f.astype(np.float32)
     if norm:
         f = f / 127.5 - bias
     if crop:

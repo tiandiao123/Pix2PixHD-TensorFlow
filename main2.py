@@ -1,4 +1,12 @@
 import os
+import cv2
+import scipy.misc
+import numpy as np 
+import math
+import glob
+import random
+
+import json
 import numpy as np
 import tensorflow as tf
 from datetime import datetime
@@ -11,7 +19,7 @@ import skimage.io as io
 import os
 import argparse
 from pair_generator import PairGenerator, Inputs
-# from tf_data import Dataset
+from tf_data import Dataset
 
 curr_path = os.getcwd()
 
@@ -123,200 +131,303 @@ parser.add_argument('--test_vid_ind_ed', type=int, default=100)
 args = parser.parse_args()
 
 
-def test(args):
-	######## data IO
-	out_dir = args.out_dir	
-	test_image_names = glob.glob(args.test_image_path+'/*.jpg')	
-	if not os.path.isdir(out_dir): os.mkdir(out_dir)
-	# TF placeholder for graph input
-	image_A = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
-	image_B = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
-	keep_prob = tf.placeholder(tf.float32)
-	# Initialize model
-	model = pix2pix_network(image_A,image_B,args.batch_size,keep_prob, weights_path='')
-	# Loss
-	D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
-	# Initialize a saver
-	saver = tf.train.Saver(max_to_keep=None)
-	# Config
-	config = tf.ConfigProto()
-	config.gpu_options.allow_growth = True
-	config.allow_soft_placement = True
-	######### Start training
-	with tf.Session(config=config) as sess: 
-		with tf.device('/gpu:0'):
-			# Initialize all variables and start queue runners	
-			sess.run(tf.local_variables_initializer())
-			sess.run(tf.global_variables_initializer())
-			# To continue training from one of the checkpoints
-			if not args.checkpoint_name:
-				raise IOError('In test mode, a checkpoint is expected.')
-			saver.restore(sess, args.checkpoint_name)
-			# Test network
-			print('generating network output')
-			for curr_test_image_name in test_image_names:			
-				splits = curr_test_image_name.split('/')
-				splits = splits[len(splits)-1].split('.')
-				print(curr_test_image_name)
-				batch_A,batch_B = load_images_paired(list([curr_test_image_name]),
-					is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
-				fake_B = sess.run(model.generator_output(image_A), 
-					feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})				
-				io.imsave(out_dir+splits[0]+'_test_output_fakeB.png',(fake_B[0]+1.0)/2.0)
-				io.imsave(out_dir+splits[0]+'_realB.png',(batch_B[0]+1.0)/2.0)
-				io.imsave(out_dir+splits[0]+'_realA.png',(batch_A[0]+1.0)/2.0)
+def findAllPairs(args):
+    images_count = {}
+    
 
-def train(args):
-	######## data IO
-	dataset_name = args.dataset_name
-	image_names = glob.glob(args.train_image_path+'/*.jpg')
-	shuffle(image_names)	
-	test_image_names = glob.glob(args.test_image_path+'/*.jpg')
+    images_name_map = {}
+    for i in range(args.sample_st, args.sample_ed+1):
+        input_map = {}
+        target_map = {}
+        folder_id = i
+        folder_path = os.path.join(args.dataroot, str(folder_id))
 
-	######## Training variables
-	num_epochs = args.num_epochs
-	lr = args.lr	
-	batch_size = args.batch_size
-	total_train_images = len(image_names)
-	num_iters_per_epoch = total_train_images/args.batch_size
-	input_h = args.input_size
-	input_w = args.input_size	
-	dataset_name = args.dataset_name
 
-	######### Prep for training
-	# Path for tf.summary.FileWriter and to store model checkpoints
-	filewriter_path = curr_path+'/'+dataset_name+'_'+args.checkpoint_name_preamble+"_pix2pix_training_info2/TBoard_files"
-	checkpoint_path = curr_path+'/'+dataset_name+'_'+args.checkpoint_name_preamble+"_pix2pix_training_info2/"
-	out_dir = checkpoint_path+'sample_outputs/'
-	if not os.path.isdir(checkpoint_path): os.mkdir(checkpoint_path)
-	if not os.path.isdir(filewriter_path): os.mkdir(filewriter_path)
-	if not os.path.isdir(out_dir): os.mkdir(out_dir)
+        sub_folder_path = os.path.join(folder_path, 'PNCC')
+        images = glob.glob(sub_folder_path+"/*.png")
+        count_len = len(images)
+        images_count[i] = count_len
 
-	# TF placeholder for graph input
-	image_A = tf.placeholder(tf.float32, [None, input_h, input_w, 3])
-	image_B = tf.placeholder(tf.float32, [None, input_h, input_w, 3])
-	keep_prob = tf.placeholder(tf.float32)
+    train_list = []
+    target_list = []
+    for folder_id in range(args.sample_st, args.sample_ed+1):
+    	for image_id in range((images_count[folder_id]-args.frame_count)):
+    			train_list.append((folder_id, image_id))
+    			target_list.append(folder_id+args.frame_count)
 
-	# Initialize model
-	model = pix2pix_network(image_A,image_B,batch_size,keep_prob, weights_path='')
 
-	# Loss
-	D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
+    # print(target_list)
+    # print(train_list)
 
-	# Summary
-	tf.summary.scalar("D_loss", D_loss)
-	tf.summary.scalar("G_loss_GAN", G_loss_GAN)
-	tf.summary.scalar("G_loss_L1", G_loss_L1)
-	merged = tf.summary.merge_all()
 
-	# Optimization
-	D_vars = [v for v in tf.trainable_variables() if v.name.startswith("dis_")]
-	D_train_op = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5).minimize(D_loss, var_list=D_vars)
-	with tf.control_dependencies([D_train_op]):
-		G_vars = [v for v in tf.trainable_variables() if v.name.startswith("gen_")]
-		G_train_op = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5).minimize(G_loss, var_list=G_vars)		
-
-	# Initialize a saver and summary writer
-	saver = tf.train.Saver(max_to_keep=None)
-
-	# Config
-	config = tf.ConfigProto()
-	config.gpu_options.allow_growth = True
-	config.allow_soft_placement = True
-
-	######### Start training
-	with tf.Session(config=config) as sess: 
-		with tf.device('/gpu:0'):
-
-			# Initialize all variables and start queue runners	
-			sess.run(tf.local_variables_initializer())
-			sess.run(tf.global_variables_initializer())
-			threads = tf.train.start_queue_runners(sess=sess)
-			train_writer = tf.summary.FileWriter(filewriter_path + '/train', sess.graph)
-
-			# To continue training from one of the checkpoints
-			if args.checkpoint_name:
-				saver.restore(sess, args.checkpoint_name)
-			
-			start_time = time.time()
-			# Loop over number of epochs
-			start_epoch = 0
-			for epoch in range(start_epoch,num_epochs):
-
-				print("{} epoch: {}".format(datetime.now(), epoch))
-				
-				step = 0
-				# Loop over iterations of an epoch
-				D_loss_accum = 0.0
-				G_loss_L1_accum = 0.0
-				G_loss_GAN_accum = 0.0
-
-				# Test network
-				print('generating network output')
-				curr_test_image_name = np.random.choice(test_image_names, 1)
-				batch_A,batch_B = load_images_paired(curr_test_image_name,is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
-				fake_B = sess.run(model.generator_output(image_A), feed_dict=
-					{image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
-				print(curr_test_image_name[0][:-4])
-				splits = curr_test_image_name[0].split('/')
-				splits = splits[len(splits)-1].split('.')
-				io.imsave(out_dir+splits[0]+'_epoch_'+str(epoch)+'.png',(np.concatenate(((batch_A[0]+1.0)/2.0,(batch_B[0]+1.0)/2.0,(fake_B[0]+1.0)/2.0),axis = 1)))
-
-				for iter in np.arange(0,len(image_names),batch_size):
-
-					# Get a batch of images (paired)				
-					curr_image_names = image_names[iter*batch_size:(iter+1)*batch_size]
-					batch_A,batch_B = load_images_paired(curr_image_names,is_train = True, true_size = args.input_size, enlarge_size = args.enlarge_size)
-
-					# One training iteration
-					summary, _, D_loss_curr_iter, G_loss_L1_curr_iter, G_loss_GAN_curr_iter = sess.run([merged, G_train_op, D_loss, G_loss_L1, G_loss_GAN], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
-					# Record losses for display
-					G_loss_L1_accum = G_loss_L1_accum + G_loss_L1_curr_iter
-					G_loss_GAN_accum = G_loss_GAN_accum + G_loss_GAN_curr_iter
-					D_loss_accum = D_loss_accum + D_loss_curr_iter
-					train_writer.add_summary(summary, epoch*len(image_names)/batch_size + iter)
-					step += 1			
-				
-				end_time = time.time()
-				print('elapsed time for epoch '+str(epoch)+' = '+str(end_time-start_time))
-				epoch = epoch+1
-				G_loss_L1_accum = G_loss_L1_accum/num_iters_per_epoch
-				G_loss_GAN_accum = G_loss_GAN_accum/num_iters_per_epoch
-				D_loss_accum = D_loss_accum/num_iters_per_epoch
-
-				print("G loss L1: "+str(G_loss_L1_accum))
-				print("G loss GAN: "+str(G_loss_GAN_accum))
-				print("D loss: "+str(D_loss_accum))
-
-				# Save the most recent model
-				for f in glob.glob(checkpoint_path+"model_epoch"+str(epoch-1)+"*"):
-					os.remove(f)
-				checkpoint_name = os.path.join(checkpoint_path, 'model_epoch'+str(epoch)+'.ckpt')
-				save_path = saver.save(sess, checkpoint_name)		
-
-			train_writer.close()
+    return train_list, target_list 
 
 
 
-def test_data_loader(args):
-	generator = PairGenerator(args)
-	iter = generator.get_next_pair()
-	for i in range(2):
-		res = next(iter)
-		print("image_index: " + str(res['image_index']))
-		print("folder_index: " + str(res['folder_index']))
-		print("target_image_index: " + str(res['target_image_index']))
+def read_frame(file_path, crop=False, ih=0, iw=0, resize=False, rh=0, rw=0, norm=True, bias=1, crop_h_flag=0, args=None):
+    print(file_path)
+    f = cv2.imread(file_path)
+    f = np.array(f)
+    f = f.astype(np.float32)
+    if norm:
+        f = f / 127.5 - bias
+    if crop:
+        if not crop_h_flag:
+            down_px = 0 # gimp: 380-1100
+            f = f[400-down_px :1120- down_px , 0:720] # lower crop 1130 
+            # center crop 654 x 654 from 720 x 720 -- scale 1.1
+            scale = 1.0 
+            if scale > 1:
+                st = int((720 - 720/scale)/2)
+                ed = st+int(720/scale)
+                f = f[st:ed, st:ed]
+
+
+            elif scale > 0 and scale < 1:
+                side_len = int(720/scale)
+                f_cache = np.zeros((side_len, side_len, 3), dtype=float)
+                # pos = [0, 0]
+                f_cache -= 1 # color black -> value -1
+                st = int((720/scale - 720)/2)
+                ed = st+720
+                f_cache[st:ed, st:ed] = f
+                f = f_cache
+
+
+        elif crop_h_flag in [10, 20, 21, 30]:
+
+            # f = f[args.crop_pos_x:(args.crop_pos_x+args.crop_scale_h), args.crop_pos_y:(args.crop_pos_y+args.crop_scale_w)]
+            f_cache = np.zeros((args.crop_scale_h, args.crop_scale_w, 3), dtype=float)
+            f_cache -= 1 # color black -> value -1
+
+            x_l = max([args.crop_pos_x, 0])
+            x_r = min([args.crop_pos_x+args.crop_scale_h, f.shape[0]]) # h # scipy.misc.imread -> h x w x c
+            y_l = max([args.crop_pos_y, 0])
+            y_r = min([args.crop_pos_y+args.crop_scale_w, f.shape[1]]) # w
+
+            f_cache[(x_l-args.crop_pos_x):(x_r-args.crop_pos_x), (y_l-args.crop_pos_y):(y_r-args.crop_pos_y)] = f[x_l:x_r, y_l:y_r]
+            f = f_cache
+
+        else:
+            ih = f.shape[0]
+            iw = f.shape[1]
+            crop_size = min([ih, iw])
+            f = f[int(ih/2 - crop_size/2) : int(ih/2 + crop_size/2), int(iw/2 - crop_size/2): int(iw/2 + crop_size/2)]
+
+    if args.scale_aug:
+        scale = args.scale
+
+        f_cache = np.zeros(f.shape, dtype=float)
+        f_cache -= 1
+        if scale >= 1:
+            f_cache[int(f.shape[0]*(1-1/scale)/2):int(f.shape[0]*((1-1/scale)/2))+int(f.shape[0]*1/scale), int(f.shape[1]*(1-1/scale)/2):int(f.shape[1]*((1-1/scale)/2))+int(f.shape[1]*1/scale)] = cv2.resize(f, (int(f.shape[0]/scale), int(f.shape[1]/scale)), interpolation=cv2.INTER_CUBIC)
+        else:
+            f_cache = cv2.resize(f, (int(f.shape[0]/scale), int(f.shape[1]/scale)), interpolation=cv2.INTER_CUBIC)[int(f.shape[0]*(1/scale-1)/2):int(f.shape[0]*((1/scale-1)/2+1)), int(f.shape[1]*(1/scale-1)/2):int(f.shape[1]*((1/scale-1)/2+1) )]
+
+        f = f_cache
+
+    if resize: 
+        f = cv2.resize(f, (rw, rh), interpolation=cv2.INTER_CUBIC)
+
+    return f
+
+
+
+
+
+
+def read_image_and_resize(folder_index, image_index, target_image_index):
+
+        image_index = 1
+        folder_index = 1
+        target_image_index = 1
+
+        # print("image_index: ")
+        # print(image_index)
+        # print("folder_index: ")
+        # print(folder_index)
+        # print("target_image_index: ")
+        # print(target_image_index)
+
+        IMAGE_WIDTH = args.resize_w 
+        IMAGE_HEIGHT = args.resize_h
+
+        out_x = np.zeros( (IMAGE_HEIGHT, IMAGE_WIDTH, 3*3*args.frame_count)) # channel concatenate.
+
+        # image_index = pair_element[0]
+        # folder_index = pair_element[1]
+        # target_image_index = pair_element[2]
+
+        sample_folder_full = os.path.join(args.dataroot, str(folder_index))
+        crop_h_flag = args.crop_h_flag
+
+        if crop_h_flag == 20:
+            # read json f1
+            i_file_j = sample_folder_full+'/json/j_1.json'
+
+            fp = open(i_file_j, 'r')
+            f_content = fp.read()
+            fp.close()
+            j = json.loads(f_content)
+
+            hyp_para_crop_w = 1.98
+            hyp_para_crop_h = 2.53
+            hyp_para_crop_x = 0.5 # in width direction
+            hyp_para_crop_y = 1.07
+
+            crop_scale_w = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
+            crop_scale_h = int((j['points'][8][1] - 0.5 * j['points'][16][1] - 0.5 * j['points'][0][1] ) * hyp_para_crop_h)
+            crop_pos_y = int(j['points'][0][0] - hyp_para_crop_x * (j['points'][16][0] - j['points'][0][0]))
+            crop_pos_x = int(0.5*(j['points'][16][1] + j['points'][0][1]) - hyp_para_crop_y * (j['points'][8][1] - 0.5* (j['points'][16][1] + j['points'][0][1]) ) )
+
+        if crop_h_flag == 30: # h=w in crop_h_flag 20
+            # read json f1
+            i_file_j = sample_folder_full+'/json/j_1.json'
+
+            fp = open(i_file_j, 'r')
+            f_content = fp.read()
+            fp.close()
+            j = json.loads(f_content)
+
+            hyp_para_crop_w = 1.98
+            hyp_para_crop_h = 2.53
+            hyp_para_crop_x = 0.5 # in width direction
+            hyp_para_crop_y = 1.07
+
+            crop_scale_w = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
+            crop_scale_h = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
+            crop_pos_y = int(j['points'][0][0] - hyp_para_crop_x * (j['points'][16][0] - j['points'][0][0]))
+            crop_pos_x = int(0.5*(j['points'][16][1] + j['points'][0][1]) - hyp_para_crop_y * (j['points'][8][1] - 0.5* (j['points'][16][1] + j['points'][0][1]) ) )
+
+        if crop_h_flag == 21: # use points 39 44 55
+            # read json f1
+            i_file_j = sample_folder_full+'/json/j_1.json'
+
+            fp = open(i_file_j, 'r')
+            f_content = fp.read()
+            fp.close()
+            j = json.loads(f_content)
+
+            points=[j['points'][38], j['points'][43], j['points'][54] ]
+
+            hyp_para_crop_w = 7.815
+            hyp_para_crop_h = 8.576
+            hyp_para_crop_x = 3.364 # in width direction
+            hyp_para_crop_y = 3.822
+
+            crop_scale_w = int((points[1][0] - points[0][0]) * hyp_para_crop_w)
+            # self.args.crop_scale_h = int((points[2][1] - 0.5 * points[1][1] - 0.5 * points[0][1] ) * hyp_para_crop_h)
+            crop_scale_h = crop_scale_w
+
+            crop_pos_y = int(points[0][0] - hyp_para_crop_x * (points[1][0] - points[0][0]))
+            crop_pos_x = int(0.5*(points[1][1] + points[0][1]) - hyp_para_crop_y * (points[2][1] - 0.5* (points[1][1] + points[0][1]) ) )
+
+
+        for i in range(args.frame_count):
+            image_extract_id = image_index + i
+
+            PNCC_folder_path = os.path.join(sample_folder_full, 'PNCC')
+            extract_image_path = PNCC_folder_path + "/p_" + str(image_extract_id) + ".png"
+            out_x[ :, :, i*9:i*9+3] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+                rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
+            
+
+
+            dtex_folder_path = os.path.join(sample_folder_full, '3dTex')
+            extract_image_path = dtex_folder_path + "/t_" + str(image_extract_id) + ".png"
+            out_x[ :, :, i*9+3:i*9+6] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+                rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
+
+            densepose_folder_path = os.path.join(sample_folder_full, 'densepose')
+            extract_image_path = densepose_folder_path + "/f_" + str(image_extract_id) + "_IUV.png"
+            out_x[ :, :, i*9+6:i*9+9] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+                rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
+
+
+        target_img = ""
+        if args.mode == 'train':
+            face_folder_path = os.path.join(sample_folder_full, 'face')
+            extract_image_path = face_folder_path + "/f_" + str((image_extract_id + args.frame_count -1)) + ".png"
+
+            out_y = read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+                rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
+
+            # out_x = tf.convert_to_tensor(out_x, np.float32)
+            # out_y = tf.convert_to_tensor(out_y, np.float32)
+            #out_x = out_x.eval()
+            #out_y = out_y.eval()
+            return (out_x, out_y)
+        else:
+
+            # out_x = tf.convert_to_tensor(out_x, np.float32)
+
+            #out_x = out_x.eval()
+            return (out_x, )
+
+
+
+# def test_data_loader(args):
+# 	# generator = PairGenerator(args)
+# 	# iter = generator.get_next_pair()
+
+# 	# for i in range(600):
+# 	# 	print(next(iter))
+
+# 	ds = Dataset(args)
+# 	model_input = ds.next_element
+
+# 	with tf.Session() as sess:
+# 		(train_img, target_img) = sess.run([model_input[0], model_input[1]])
+# 		print(train_img.shape)
+# 		print(target_img.shape)
+		
+def parse_function(train_image_ids, target_image_id):
+    # print("train image ids: ")
+    # print(train_image_ids["arg0:0"])
+    # print("target_image_id: ")
+    # print(target_image_id["arg1:0"])
+
+    folder_id = train_image_ids[0]
+    image_id = train_image_ids[1]
+    return read_image_and_resize(image_id, folder_id, target_image_id)
 
 
 def main(args):
-	# if args.mode == 'train':
-	# 	train(args)
-	# if args.mode == 'test':
+    if args.mode == 'train':
+        train_list, target_list = findAllPairs(args)
+        target_list = np.array(target_list)
+        train_list = np.array(train_list)
+
+
+        dataset = tf.data.Dataset.from_tensor_slices((train_list, target_list))
+        dataset = dataset.shuffle(len(target_list))
+        dataset = dataset.map(parse_function, num_parallel_calls=4)
+        # dataset = dataset.map(train_preprocess, num_parallel_calls=4)
+        dataset = dataset.batch(args.batch_size)
+        dataset = dataset.prefetch(5)
+        iterator = dataset.make_initializable_iterator()
+        ele1, ele2 = iterator.get_next()
+        init_op = iterator.initializer
+
+
+        with tf.Session() as sess:
+            sess.run(init_op)
+            (train_img, target_img) = sess.run([ele1, ele2])
+            #print(new_ele)
+            print(train_img.shape)
+            print(target_img.shape)
+    elif args.mode == 'test':
+        pass
+    else:
+        pass
+
+
+ #    elif args.mode == 'test':
 	# 	test(args)
 	# else:
 	# 	raise 'mode input should be train or test.'
 
-	test_data_loader(args)
+	
 
 if __name__ == '__main__':
     main(args)

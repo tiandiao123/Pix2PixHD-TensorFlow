@@ -80,10 +80,8 @@ class PairGenerator(object):
 
 
 
-
-            yield ({'image_index': image_index, 
-                    'folder_index': array[random_folder_index], 
-                    'target_image_index': (image_index + self.frame_count-1)})
+            yield image_index, array[random_folder_index], (image_index + self.frame_count-1)
+            # yield str(image_index)+" "+str(array[random_folder_index])+" "+str(image_index + self.frame_count-1)
 
 
 
