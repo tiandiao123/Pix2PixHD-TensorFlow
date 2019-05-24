@@ -18,7 +18,7 @@ def lrelu(x,lrelu_alpha,name):
 	return (0.5 * (1 + lrelu_alpha)) * x + (0.5 * (1 - lrelu_alpha)) * tf.abs(x)
 	# return tf.maximum(x, tf.multiply(x, tf.constant(lrelu_alpha)), name = name)
 
-def conv(x, filter_height, filter_width, num_outputs, stride_y, stride_x, name, padding='VALID', batchnorm = True, lrelu_alpha=0.2):
+def conv(x, filter_height, filter_width, num_outputs, stride_y, stride_x, name, padding='SAME', batchnorm = True, lrelu_alpha=0.2):
 	# conv
 	input_channels = int(x.get_shape()[3])
 	weights = get_scope_variable(name, 'weights', shape=[filter_height, filter_width, input_channels, num_outputs], initialvals=tf.random_normal_initializer(0, 0.02))      
@@ -51,3 +51,11 @@ def get_text_file_lines(txt_file_name,shuffle=False):
 	if shuffle == True:
 		np.random.shuffle(lines)
 	return lines
+
+
+def residual_block():
+	pass
+	
+
+def pix_global_middle():
+	pass
