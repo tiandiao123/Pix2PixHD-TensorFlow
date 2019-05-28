@@ -26,7 +26,7 @@ curr_path = os.getcwd()
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", dest='num_epochs', type=int, default=200, help="specify number of epochs")
 parser.add_argument("--lr", dest='lr', type=float, default=0.0002, help="specify learning rate")
-parser.add_argument("--dropout", dest='dropout_rate', type=float, default=0.5, help="specify dropout")
+parser.add_argument("--dropout_rate", dest='dropout_rate', type=float, default=0.5, help="specify dropout")
 parser.add_argument("--dataset", dest='dataset_name', type=str, default='facades', help="specify dataset name")
 parser.add_argument("--train_image_path", dest='train_image_path', type=str, help="specify path to training images")
 parser.add_argument("--test_image_path", dest='test_image_path', type=str, help="specify path to test images")
@@ -93,7 +93,6 @@ parser.add_argument('--iter', type=int, default=0, help='number of iterations fo
 parser.add_argument('--pretrain_iter', type=int, default=0, help='number of iterations for pre-train')
 parser.add_argument('--epoch', type=int, default=10, help='number of epochs for training')
 
-parser.add_argument('--generatorLR', type=float, default=0.0001, help='learning rate for generator')
 parser.add_argument('--model_save_interval', type=int, default=10000, help='save weights interval -> step record')
 parser.add_argument('--model_save_interval_replace', type=int, default=1000, help='save weights interval -> latest')
 parser.add_argument('--display_interval', type=int, default=1000, help='display images interval')
@@ -103,31 +102,8 @@ parser.add_argument('--base_arch', type=str, default='pix_global', help='unet/pi
 parser.add_argument('--use_dropout', action='store_true')
 parser.add_argument('--drop_rate', type=float, default=0.5)
 
-# DI
-parser.add_argument('--discriminatorLR', type=float, default=0.0001, help='learning rate for discriminator')
-parser.add_argument('--discriminator_lambda', type=float, default=0.01, help='LAMBDA for adv loss')
-parser.add_argument('--adv_loss_type', type=str, default='mse', help='mse/bce')
 
 
-
-# -------------------------------------------- pre-load parameters -------------------------------------
-parser.add_argument('--generator_weights', type=str, default='', help='path to generator weights to continue training')
-parser.add_argument('--continue_iter', type=int, default=0, help='number of iterations for previous training')
-parser.add_argument('--continue_epoch', type=int, default=0, help='number of epochs for previous training')
-
-parser.add_argument('--discriminatorI_weights', type=str, default='', help='path to discriminatorI weights to continue training')
-parser.add_argument('--continue_gan_iter', type=int, default=0, help='number of iterations for previous training')
-
-# -------------------------------------------- inference configurations ---------------------------------
-parser.add_argument('--infer_out_root', type=str, default='../infer_res', help='results root folder of inference')
-parser.add_argument('--to_vid', action='store_true', help='convert output images to videos')
-parser.add_argument('--old_single_frame_dataloader_debug', action='store_true', help='-1 ~ -0.5 in dataloader and vid_infer')
-
-parser.add_argument('--no_gt', action='store_true', help='do not load gt folder')
-parser.add_argument('--remain_frames', action='store_true', help='remain frames after generating videos')
-
-parser.add_argument('--test_vid_ind_st', type=int, default=80)
-parser.add_argument('--test_vid_ind_ed', type=int, default=100)
 
 args = parser.parse_args()
 
@@ -236,7 +212,7 @@ def train(args):
     keep_prob = tf.placeholder(tf.float32)
 
     # Initialize model
-    model = pix2pixHD_network(image_A,image_B,batch_size,keep_prob, args, weights_path='')
+    model = pix2pixHD_network(image_A,image_B,batch_size, keep_prob, args, weights_path='')
 
     # Loss
     D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
@@ -247,12 +223,16 @@ def train(args):
     tf.summary.scalar("G_loss_L1", G_loss_L1)
     merged = tf.summary.merge_all()
 
+
+
     # Optimization
     D_vars = [v for v in tf.trainable_variables() if v.name.startswith("dis_")]
-    D_train_op = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5).minimize(D_loss, var_list=D_vars)
-    with tf.control_dependencies([D_train_op]):
-        G_vars = [v for v in tf.trainable_variables() if v.name.startswith("gen_")]
-        G_train_op = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5).minimize(G_loss, var_list=G_vars)      
+    G_vars = [v for v in tf.trainable_variables() if v.name.startswith("gen_")]
+
+    learning_rate = args.lr
+    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+        D_train_opt = tf.train.RMSPropOptimizer(learning_rate).minimize(D_loss, var_list=D_vars)
+        G_train_opt = tf.train.RMSPropOptimizer(learning_rate).minimize(G_loss, var_list=G_vars)
 
     # Initialize a saver and summary writer
     saver = tf.train.Saver(max_to_keep=None)
@@ -281,49 +261,53 @@ def train(args):
             start_epoch = 0
             for epoch in range(start_epoch,num_epochs):
 
-                print("{} epoch: {}".format(datetime.now(), epoch))
+                print("generator pretrain epoch {} begin: ".format(str(epoch)))
+                step = 0
+                generator_loss = 0
+                for iter_id in np.arange(0,len(train_list),batch_size):
+                    batch_A,batch_B = load_images_paired2(args, iter_id, batch_size, image_size, frame_count, train_list)
+
+                    _, g_loss = sess.run([G_train_opt, G_loss], \
+                        feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
+                    step += 1
+                    generator_loss += g_loss
+
+                    average_g_loss = (float)(generator_loss)/step
+
+                    print("the iteration {} of epcoh {}'s for pretrain G_loss is: {}".format(str(step), str(epoch), str(average_g_loss)))
+
+
                 
                 step = 0
                 # Loop over iterations of an epoch
                 D_loss_accum = 0.0
-                G_loss_L1_accum = 0.0
-                G_loss_GAN_accum = 0.0
+                G_loss_accum = 0.0
 
                 # Test network
-                print('generating network output')
-                # random_index = np.random.choice(len(train_list), 1)
-                # image_size = args.resize_w
-                # batch_size = args.batch_size
-                # frame_count =args.frame_count
-                # batch_A,batch_B = load_images_paired2(args, random_index, batch_size, image_size, frame_count, train_list)
-                
+                print('disciminator network comes in and training')
+                print("GAN training epcoh {} begins: ".format(str(epoch)))
 
                 for iter_id in np.arange(0,len(train_list),batch_size):
 
                     # Get a batch of images (paired)                
+                    step+=1
                     batch_A,batch_B = load_images_paired2(args, iter_id, batch_size, image_size, frame_count, train_list)
 
-                    # One training iteration
-                    summary, _, D_loss_curr_iter, G_loss_L1_curr_iter, G_loss_GAN_curr_iter = sess.run([merged, G_train_op, D_loss, G_loss_L1, G_loss_GAN], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
+                    _, d_loss = sess.run([D_train_opt, D_loss], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
+                    _, g_loss = sess.run([G_train_opt, G_loss], \
+                        feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5}) 
+
                     # Record losses for display
-                    G_loss_L1_accum = G_loss_L1_accum + G_loss_L1_curr_iter
-                    G_loss_GAN_accum = G_loss_GAN_accum + G_loss_GAN_curr_iter
-                    D_loss_accum = D_loss_accum + D_loss_curr_iter
-                    print("epoch {} and iteration {} G_loss_L1_accum {}, G_loss_GAN_accum {}, D_loss_accum {}: ".format(str(epoch), str(iter_id), \
-                        str(G_loss_L1_accum), str(G_loss_GAN_accum), str(D_loss_accum)))
+                    D_loss_accum += d_loss
+                    G_loss_accum += g_loss
+                    average_d_loss = (float)(D_loss_accum)/step
+                    average_g_loss = (float)(G_loss_accum)/step
+                    print("iteration {} of epcoh {} for GAN training's D_loss {}, G_loss {}".format(str(step),str(epoch),str(average_d_loss), str(average_g_loss)))
+
                     train_writer.add_summary(summary, epoch*len(train_list)/batch_size + iter_id)
                     step += 1           
                 
                 end_time = time.time()
-                print('elapsed time for epoch '+str(epoch)+' = '+str(end_time-start_time))
-                epoch = epoch+1
-                G_loss_L1_accum = G_loss_L1_accum/num_iters_per_epoch
-                G_loss_GAN_accum = G_loss_GAN_accum/num_iters_per_epoch
-                D_loss_accum = D_loss_accum/num_iters_per_epoch
-
-                print("G loss L1: "+str(G_loss_L1_accum))
-                print("G loss GAN: "+str(G_loss_GAN_accum))
-                print("D loss: "+str(D_loss_accum))
 
                 # Save the most recent model
                 for f in glob.glob(checkpoint_path+"model_epoch"+str(epoch-1)+"*"):
