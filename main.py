@@ -42,6 +42,7 @@ parser.add_argument('--sample_ed', type=int, default=-1)
 parser.add_argument('--frame_count', type=int, default=-1)
 parser.add_argument('--batch_size', type=int, default=4, help='gen and disc batch size')
 parser.add_argument('--cur_path', type=str, default="", help="current path")
+parser.add_argument('--infer_out_root', type=str, default='./infer_res', help='results root folder of inference')
 
 
 
@@ -136,7 +137,21 @@ def findAllTuple(args):
     return train_list
 
 def get_inference_tuples(folder_id):
-    pass
+    folder_path = os.path.join(args.dataroot, str(folder_id))
+    sub_folder_path = os.path.join(folder_path, 'PNCC')
+    images = glob.glob(sub_folder_path+"/*.png")
+
+    count_len = len(images)
+    test_list
+    for image_index in range(count_len-args.frame_count):
+        image_id = image_index+1
+        test_list.append((folder_id, image_id, image_id+args.frame_count-1))
+    
+
+    return test_list
+
+
+    
 
 
 def test(args):
@@ -150,6 +165,7 @@ def test(args):
     image_size = args.resize_w
     frame_count = args.frame_count
     cur_path = os.getcwd()
+    bias=1
 
 
     # TF placeholder for graph input
@@ -160,6 +176,7 @@ def test(args):
     model = pix2pixHD_network(image_A,image_B,args.batch_size,keep_prob, args, weights_path='')
     # Loss
     D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
+    generator_image = model.generator_output(image_A)
     # Initialize a saver
     saver = tf.train.Saver(max_to_keep=None)
     # Config
@@ -167,6 +184,14 @@ def test(args):
     config.gpu_options.allow_growth = True
     config.allow_soft_placement = True
     ######### Start training
+
+
+
+    infer_out_root = args.infer_out_root
+    if not os.path.isdir(infer_out_root):
+        os.mkdir(infer_out_root)
+
+
     with tf.Session(config=config) as sess: 
         with tf.device('/gpu:0'):
             # Initialize all variables and start queue runners  
@@ -178,16 +203,51 @@ def test(args):
             saver.restore(sess, args.checkpoint_name)
             # Test network
             print('generating network output')
-            for iter_id in np.arange(0,len(train_list),batch_size):
+            for folder_id in range(args.sample_st, args.sample_ed+1):
+                image_tuples = get_inference_tuples(folder_id)
+                # batch_size should be 1 when inference
+                args.batch_size = 1
+                batch_size = 1
+
+                test_list = get_inference_tuples(folder_id)
 
 
-                batch_A,batch_B = load_images_paired2(list([curr_test_image_name]),
-                    is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
-                fake_B = sess.run(model.generator_output(image_A), 
-                    feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})             
-                io.imsave(out_dir+splits[0]+'_test_output_fakeB.png',(fake_B[0]+1.0)/2.0)
-                io.imsave(out_dir+splits[0]+'_realB.png',(batch_B[0]+1.0)/2.0)
-                io.imsave(out_dir+splits[0]+'_realA.png',(batch_A[0]+1.0)/2.0)
+                ind_folder = os.path.join(infer_out_root, str(folder_id))
+                # ind_folder = os.path.join(infer_out_dir, folder_list[vid_ind])
+                if not os.path.isdir(ind_folder):
+                    os.mkdir(ind_folder)
+                pred_folder = os.path.join(ind_folder, 'y_pred')
+                if not os.path.isdir(pred_folder):
+                    os.mkdir(pred_folder)
+
+
+
+
+                for iter_id in np.arange(0,len(test_list),batch_size):
+                    batch_A, batch_B = load_images_paired2(args, iter_id, batch_size, image_size, frame_count, test_list)
+
+                    fake_B, cur_g_loss = sess.run([generator_image, G_loss], \
+                        feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
+
+                    img1 = scipy.misc.toimage((fake_B[0]+bias)/2, cmin=0, cmax=1)
+                    img1.save(pred_folder+'/%04d.png'%(iter_id+1))
+
+                    print("folder {}'s image {}'s generator loss is : ".format(str(folder_id), str(iter_id), str(cur_g_loss)))
+
+                ff_to_vid(pred_folder, '%04d.png', ind_folder+'/y_pred.mp4', resolution=args.resize_h)
+
+
+
+            # for iter_id in np.arange(0,len(train_list),batch_size):
+
+
+            #     batch_A,batch_B = load_images_paired2(list([curr_test_image_name]),
+            #         is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
+            #     fake_B = sess.run(model.generator_output(image_A), 
+            #         feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})             
+            #     io.imsave(out_dir+splits[0]+'_test_output_fakeB.png',(fake_B[0]+1.0)/2.0)
+            #     io.imsave(out_dir+splits[0]+'_realB.png',(batch_B[0]+1.0)/2.0)
+            #     io.imsave(out_dir+splits[0]+'_realA.png',(batch_A[0]+1.0)/2.0)
 
 def train(args):
     ######## data IO
