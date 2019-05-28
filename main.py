@@ -152,8 +152,9 @@ def findAllTuple(args):
     train_list = []
     # target_list = []
     for folder_id in range(args.sample_st, args.sample_ed+1):
-    	for image_id in range((images_count[folder_id]-args.frame_count)):
-    			train_list.append([folder_id, image_id, image_id+args.frame_count])
+    	for image_index in range((images_count[folder_id]-args.frame_count)):
+            image_id = image_index + 1
+            train_list.append([folder_id, image_id, image_id+args.frame_count-1])
     			
 
     return train_list
