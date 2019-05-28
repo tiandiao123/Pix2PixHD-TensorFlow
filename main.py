@@ -135,15 +135,25 @@ def findAllTuple(args):
 
     return train_list
 
+def get_inference_tuples(folder_id):
+    pass
 
 
 def test(args):
-    ######## data IO
-    out_dir = args.out_dir  
-    test_image_names = glob.glob(args.test_image_path+'/*.jpg') 
-    if not os.path.isdir(out_dir): os.mkdir(out_dir)
+    num_epochs = args.num_epochs
+    lr = args.lr    
+    batch_size = args.batch_size
+    total_train_images = len(train_list)
+    num_iters_per_epoch = total_train_images/args.batch_size
+    input_h = args.resize_h
+    input_w = args.resize_w
+    image_size = args.resize_w
+    frame_count = args.frame_count
+    cur_path = os.getcwd()
+
+
     # TF placeholder for graph input
-    image_A = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
+    image_A = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 9*args.frame_count])
     image_B = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
     keep_prob = tf.placeholder(tf.float32)
     # Initialize model
@@ -168,11 +178,10 @@ def test(args):
             saver.restore(sess, args.checkpoint_name)
             # Test network
             print('generating network output')
-            for curr_test_image_name in test_image_names:           
-                splits = curr_test_image_name.split('/')
-                splits = splits[len(splits)-1].split('.')
-                print(curr_test_image_name)
-                batch_A,batch_B = load_images_paired(list([curr_test_image_name]),
+            for iter_id in np.arange(0,len(train_list),batch_size):
+
+
+                batch_A,batch_B = load_images_paired2(list([curr_test_image_name]),
                     is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
                 fake_B = sess.run(model.generator_output(image_A), 
                     feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})             
@@ -230,6 +239,7 @@ def train(args):
     G_vars = [v for v in tf.trainable_variables() if v.name.startswith("gen_")]
 
     learning_rate = args.lr
+    G_train_opt_L1 = tf.train.RMSPropOptimizer(learning_rate).minimize(G_loss_L1, var_list=G_vars)
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         D_train_opt = tf.train.RMSPropOptimizer(learning_rate).minimize(D_loss, var_list=D_vars)
         G_train_opt = tf.train.RMSPropOptimizer(learning_rate).minimize(G_loss, var_list=G_vars)
@@ -263,18 +273,18 @@ def train(args):
 
                 print("generator pretrain epoch {} begin: ".format(str(epoch)))
                 step = 0
-                generator_loss = 0
+                generator_loss_l1 = 0
                 for iter_id in np.arange(0,len(train_list),batch_size):
                     batch_A,batch_B = load_images_paired2(args, iter_id, batch_size, image_size, frame_count, train_list)
 
-                    _, g_loss = sess.run([G_train_opt, G_loss], \
+                    _, g_loss = sess.run([G_train_opt_L1, G_loss_L1], \
                         feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
                     step += 1
-                    generator_loss += g_loss
+                    generator_loss_l1 += g_loss
 
-                    average_g_loss = (float)(generator_loss)/step
+                    average_g_loss_l1 = (float)(generator_loss_l1)/step
 
-                    print("the iteration {} of epcoh {}'s for pretrain G_loss is: {}".format(str(step), str(epoch), str(average_g_loss)))
+                    print("the iteration {} of epcoh {}'s for pretrain G_loss_L1 is: {}".format(str(step), str(epoch), str(average_g_loss_l1)))
 
 
                 
