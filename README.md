@@ -1,5 +1,5 @@
 # pix2pixHD-TF
-A minimal tensorflow implementation of pix2pixHD (https://tcwang0509.github.io/pix2pixHD/).
+This is a tensorflow implementation of pix2pixHD (https://tcwang0509.github.io/pix2pixHD/).
 my codes started from original pix2pix implementation based on https://github.com/prashnani/pix2pix-tensorflow
 
 
@@ -16,7 +16,7 @@ This code has been tested to work on the following environment:
 git clone https://github.com/tiandiao123/Pix2PixHD-TensorFlow
 cd Pix2PixHD-TensorFlow
 ```
-2. The data set I am using is shared in public, but you can create your own data sets, and change pipeline, it will be good to go! 
+2. The data set I am using is not shared in public, but you can create your own data sets, and then change the data pipelines, it will be good to go!  
 
 3. Train 
 ```
