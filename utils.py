@@ -53,9 +53,16 @@ def get_text_file_lines(txt_file_name,shuffle=False):
 	return lines
 
 
-def residual_block():
-	pass
-	
+def residual_block(x, filter_height, filter_width, num_outputs, stride_y, stride_x, name, padding='SAME', batchnorm = True, lrelu_alpha=0.2):
+	input_channels = int(x.get_shape()[3])
+	weights_1 = get_scope_variable(name, 'weights_1', shape=[filter_height, filter_width, input_channels, num_outputs], \
+		initialvals=tf.random_normal_initializer(0, 0.02))      
+	conved = tf.nn.conv2d(x, weights_1, strides = [1, stride_y, stride_x, 1], padding = padding)
+	activation_layer = lrelu(apply_batchnorm(conved, name), 0.2, name)
 
-def pix_global_middle():
-	pass
+	weights_2 = get_scope_variable(name, 'weights_2', shape=[filter_height, filter_width, input_channels, num_outputs], \
+		initialvals=tf.random_normal_initializer(0, 0.02))
+
+	conved_output = tf.nn.conv2d(activation_layer, weights_2, strides=[1,strides_y, stride_x, 1], padding = padding)
+
+	return conved_output

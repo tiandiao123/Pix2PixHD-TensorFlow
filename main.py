@@ -363,7 +363,7 @@ def train(args):
                     step+=1
                     batch_A,batch_B = load_images_paired2(args, iter_id, batch_size, image_size, frame_count, train_list)
 
-                    _, d_loss = sess.run([D_train_opt, D_loss], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
+                    summary, _, d_loss, g_loss_l1, g_loss_gan = sess.run([merged, D_train_opt, D_loss, G_loss_L1, G_loss_GAN], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
                     _, g_loss = sess.run([G_train_opt, G_loss], \
                         feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5}) 
 
@@ -394,15 +394,9 @@ def main(args):
     if args.mode == 'train':
         train(args)
     elif args.mode == 'test':
-        pass
+        test(args)
     else:
         pass
-
-
- #    elif args.mode == 'test':
-	# 	test(args)
-	# else:
-	# 	raise 'mode input should be train or test.'
 
 	
 
