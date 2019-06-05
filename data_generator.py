@@ -138,10 +138,10 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
             hyp_para_crop_x = 0.5 # in width direction
             hyp_para_crop_y = 1.07
 
-            crop_scale_w = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
-            crop_scale_h = int((j['points'][8][1] - 0.5 * j['points'][16][1] - 0.5 * j['points'][0][1] ) * hyp_para_crop_h)
-            crop_pos_y = int(j['points'][0][0] - hyp_para_crop_x * (j['points'][16][0] - j['points'][0][0]))
-            crop_pos_x = int(0.5*(j['points'][16][1] + j['points'][0][1]) - hyp_para_crop_y * (j['points'][8][1] - 0.5* (j['points'][16][1] + j['points'][0][1]) ) )
+            args.crop_scale_w = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
+            args.crop_scale_h = int((j['points'][8][1] - 0.5 * j['points'][16][1] - 0.5 * j['points'][0][1] ) * hyp_para_crop_h)
+            args.crop_pos_y = int(j['points'][0][0] - hyp_para_crop_x * (j['points'][16][0] - j['points'][0][0]))
+            args.crop_pos_x = int(0.5*(j['points'][16][1] + j['points'][0][1]) - hyp_para_crop_y * (j['points'][8][1] - 0.5* (j['points'][16][1] + j['points'][0][1]) ) )
 
         if crop_h_flag == 30: # h=w in crop_h_flag 20
             # read json f1
@@ -157,10 +157,10 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
             hyp_para_crop_x = 0.5 # in width direction
             hyp_para_crop_y = 1.07
 
-            crop_scale_w = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
-            crop_scale_h = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
-            crop_pos_y = int(j['points'][0][0] - hyp_para_crop_x * (j['points'][16][0] - j['points'][0][0]))
-            crop_pos_x = int(0.5*(j['points'][16][1] + j['points'][0][1]) - hyp_para_crop_y * (j['points'][8][1] - 0.5* (j['points'][16][1] + j['points'][0][1]) ) )
+            args.crop_scale_w = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
+            args.crop_scale_h = int((j['points'][16][0] - j['points'][0][0]) * hyp_para_crop_w)
+            args.crop_pos_y = int(j['points'][0][0] - hyp_para_crop_x * (j['points'][16][0] - j['points'][0][0]))
+            args.crop_pos_x = int(0.5*(j['points'][16][1] + j['points'][0][1]) - hyp_para_crop_y * (j['points'][8][1] - 0.5* (j['points'][16][1] + j['points'][0][1]) ) )
 
         if crop_h_flag == 21: # use points 39 44 55
             # read json f1
@@ -178,12 +178,12 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
             hyp_para_crop_x = 3.364 # in width direction
             hyp_para_crop_y = 3.822
 
-            crop_scale_w = int((points[1][0] - points[0][0]) * hyp_para_crop_w)
+            args.crop_scale_w = int((points[1][0] - points[0][0]) * hyp_para_crop_w)
             # self.args.crop_scale_h = int((points[2][1] - 0.5 * points[1][1] - 0.5 * points[0][1] ) * hyp_para_crop_h)
-            crop_scale_h = crop_scale_w
+            args.crop_scale_h = crop_scale_w
 
-            crop_pos_y = int(points[0][0] - hyp_para_crop_x * (points[1][0] - points[0][0]))
-            crop_pos_x = int(0.5*(points[1][1] + points[0][1]) - hyp_para_crop_y * (points[2][1] - 0.5* (points[1][1] + points[0][1]) ) )
+            args.crop_pos_y = int(points[0][0] - hyp_para_crop_x * (points[1][0] - points[0][0]))
+            args.crop_pos_x = int(0.5*(points[1][1] + points[0][1]) - hyp_para_crop_y * (points[2][1] - 0.5* (points[1][1] + points[0][1]) ) )
 
 
         for i in range(args.frame_count):

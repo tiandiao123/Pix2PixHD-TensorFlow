@@ -141,6 +141,17 @@ def get_inference_tuples(folder_id):
     return test_list
 
 
+
+def ff_to_vid(in_folder, in_format, out_file, resolution=256):
+    if resolution==256: 
+        b_rate = 2000000 
+    elif resolution==512:
+        b_rate = 4000000
+    else:
+        raise NotImplementError('Resolution %d is not supported now.'%(resolution))
+
+    cmd = 'ffmpeg -i {}/{} -pix_fmt yuv420p -b:v {} {} -y'.format(in_folder, in_format, b_rate, out_file)
+    os.system(cmd)
     
 
 
@@ -156,15 +167,17 @@ def test(args):
     bias=1
 
 
-    # TF placeholder for graph input
-    image_A = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 9*args.frame_count])
-    image_B = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
-    keep_prob = tf.placeholder(tf.float32)
+    # # TF placeholder for graph input
+    # image_A = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 9*args.frame_count])
+    # image_B = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
+    # keep_prob = tf.placeholder(tf.float32)
+
+
     # Initialize model
-    model = pix2pixHD_network(image_A, image_B, args.batch_size, keep_prob, args, weights_path='')
-    # Loss
-    D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
-    generator_image = model.generator_output(image_A)
+    # model = pix2pixHD_network(image_A, image_B, args.batch_size, keep_prob, args, weights_path='')
+    # # Loss
+    # D_loss, G_loss, G_loss_L1, G_loss_GAN, G_loss_mse = model.compute_loss()
+    # generator_image = model.generator_output(image_A)
     # Initialize a saver
     print("train saved :")
     # saver = tf.train.Saver(max_to_keep=None)
@@ -187,7 +200,7 @@ def test(args):
 
 
     with tf.Session(config=config) as sess: 
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:6'):
             # Initialize all variables and start queue runners  
             sess.run(tf.local_variables_initializer())
             sess.run(tf.global_variables_initializer())
@@ -196,6 +209,20 @@ def test(args):
                 raise IOError('In test mode, a checkpoint is expected.')
             module_file = tf.train.latest_checkpoint(args.checkpoint_name)
             saver.restore(sess, module_file)
+
+            ops = [n.name for n in tf.get_default_graph().as_graph_def().node]
+            with open("Output.txt", "w") as text_file:
+                for o in ops:
+                    text_file.write(o+"\n")
+                    print(o)
+
+
+            generator_image =  tf.get_default_graph().get_tensor_by_name('Tanh:0')
+            image_A = tf.get_default_graph().get_tensor_by_name('Placeholder:0')
+            image_B = tf.get_default_graph().get_tensor_by_name('Placeholder_1:0')
+            G_loss = tf.get_default_graph().get_tensor_by_name('G_loss_GAN:0')
+
+
             # Test network
             print('generating network output')
             for folder_id in range(args.sample_st, args.sample_ed+1):
@@ -222,32 +249,37 @@ def test(args):
                     batch_A, batch_B = load_images_paired2(args, iter_id, args.batch_size, image_size, frame_count, test_list)
 
                     fake_B, cur_g_loss = sess.run([generator_image, G_loss], \
-                        feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
+                        feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32')})
 
                     for inner_id in range(args.batch_size):
                         count+=1
+                        print(type(fake_B))
+                        fake_B = np.array(fake_B)
+                        print(fake_B.shape)
 
                         unstack_fake_B = fake_B[inner_id]
+                        unstack_fake_B = unstack_fake_B[:,:,(2,1,0)]
 
                         img1 = scipy.misc.toimage((unstack_fake_B+1)*127.5)
                         img1.save(pred_folder+'/%04d.png'%(count+1))
 
                         print("folder {}'s image {}'s generator loss is : ".format(str(folder_id), str(count), str(cur_g_loss)))
 
-                # ff_to_vid(pred_folder, '%04d.png', ind_folder+'/y_pred.mp4', resolution=args.resize_h)
+                
+                # images = [img for img in os.listdir(pred_folder) if img.endswith(".png")]
+                # images = sorted(images)
+                # frame = cv2.imread(os.path.join(pred_folder, images[0]))
+                # height, width, layers = frame.shape
+                # video_name = os.path.join(ind_folder, 'y_pred.mp4')
+                # video = cv2.VideoWriter(video_name, 0, 1, (args.resize_h,args.resize_w))
+
+                # for image in images:
+                #     video.write(cv2.imread(os.path.join(pred_folder, image)))
+
+                # cv2.destroyAllWindows()
+                # video.release()
 
 
-
-            # for iter_id in np.arange(0,len(train_list),batch_size):
-
-
-            #     batch_A,batch_B = load_images_paired2(list([curr_test_image_name]),
-            #         is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
-            #     fake_B = sess.run(model.generator_output(image_A), 
-            #         feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})             
-            #     io.imsave(out_dir+splits[0]+'_test_output_fakeB.png',(fake_B[0]+1.0)/2.0)
-            #     io.imsave(out_dir+splits[0]+'_realB.png',(batch_B[0]+1.0)/2.0)
-            #     io.imsave(out_dir+splits[0]+'_realA.png',(batch_A[0]+1.0)/2.0)
 
 def train(args):
     ######## data IO
@@ -337,6 +369,8 @@ def train(args):
             start_time = time.time()
             # Loop over number of epochs
             start_epoch = 0
+            inference_image_list = get_inference_tuples(90)
+
             for epoch in range(start_epoch,num_epochs):
 
                 print("generator pretrain epoch {} begin: ".format(str(epoch)))
@@ -354,8 +388,10 @@ def train(args):
 
                     print("the iteration {} of epcoh {}'s for pretrain G_loss_mse is: {}".format(str(step), str(epoch), str(average_g_loss_mse)))
 
-                    if step%50 == 0:
-                        fake_B = sess.run([generator_image], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
+                    if step%500 == 0:
+                        inf_batch_A, inf_batch_B = load_images_paired2(args, 0, batch_size, image_size, frame_count, inference_image_list)
+
+                        fake_B = sess.run([generator_image], feed_dict={image_A: inf_batch_A.astype('float32'), image_B: inf_batch_B.astype('float32'), keep_prob: 0.5})
                         print(type(fake_B))
                         fake_B = np.array(fake_B)
                         print(fake_B.shape)
@@ -395,8 +431,9 @@ def train(args):
                     train_writer.add_summary(summary, epoch*len(train_list)/batch_size + iter_id)
                     step += 1
 
-                    if step%100 == 0:
-                        fake_B = sess.run([generator_image], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 0.5})
+                    if step%500 == 0:
+                        inf_batch_A, inf_batch_B = load_images_paired2(args, 0, batch_size, image_size, frame_count, inference_image_list)
+                        fake_B = sess.run([generator_image], feed_dict={image_A: inf_batch_A.astype('float32'), image_B: inf_batch_B.astype('float32'), keep_prob: 0.5})
                         print(type(fake_B))
                         fake_B = np.array(fake_B)
                         fake_B = fake_B[0][0]

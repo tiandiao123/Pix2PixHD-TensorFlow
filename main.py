@@ -110,7 +110,7 @@ parser.add_argument('--discriminatorI_weights', type=str, default='', help='path
 parser.add_argument('--continue_gan_iter', type=int, default=0, help='number of iterations for previous training')
 
 # -------------------------------------------- inference configurations ---------------------------------
-parser.add_argument('--infer_out_root', type=str, default='../infer_res', help='results root folder of inference')
+parser.add_argument('--infer_out_root', type=str, default='./infer_res', help='results root folder of inference')
 parser.add_argument('--to_vid', action='store_true', help='convert output images to videos')
 parser.add_argument('--old_single_frame_dataloader_debug', action='store_true', help='-1 ~ -0.5 in dataloader and vid_infer')
 
@@ -123,6 +123,21 @@ parser.add_argument('--test_vid_ind_ed', type=int, default=100)
 args = parser.parse_args()
 
 
+
+
+def ff_to_vid(in_folder, in_format, out_file, resolution=256):
+    if resolution==256: 
+        b_rate = 2000000 
+    elif resolution==512:
+        b_rate = 4000000
+    else:
+        raise NotImplementError('Resolution %d is not supported now.'%(resolution))
+
+    cmd = 'ffmpeg -i {}/{} -pix_fmt yuv420p -b:v {} {} -y'.format(in_folder, in_format, b_rate, out_file)
+    os.system(cmd)
+
+
+    
 def test(args):
 	######## data IO
 	out_dir = args.out_dir	
@@ -152,6 +167,7 @@ def test(args):
 			if not args.checkpoint_name:
 				raise IOError('In test mode, a checkpoint is expected.')
 			saver.restore(sess, args.checkpoint_name)
+
 			# Test network
 			print 'generating network output'
 			for curr_test_image_name in test_image_names:			
