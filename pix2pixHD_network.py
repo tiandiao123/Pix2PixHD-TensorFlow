@@ -12,6 +12,7 @@ class pix2pixHD_network(object):
 		self.dropout_rate = dropout_rate  
 		self.WEIGHTS_PATH = weights_path
 		self.l1_Weight = 100.0
+		self.L2_Weight = 100.0
 		self.args = args
 
 	def generator_output(self,image_A_input):
@@ -91,7 +92,7 @@ class pix2pixHD_network(object):
 			stride_y=2, stride_x=2, name=scope_name, padding='SAME')
 		scope_name = 'gen_generator_output_layer'
 		self.generator_output_layer = conv(self.G2_upsampling, filter_height=3, filter_width=3, num_outputs=3, stride_y=1, stride_x=1, name = scope_name)
-		self.generator_output_layer_activation = lrelu(apply_batchnorm(self.generator_output_layer, name=scope_name), lrelu_alpha=0.2, name=scope_name)
+		self.generator_output_layer_activation = tf.nn.tanh(self.generator_output_layer)
 
 
 
@@ -118,17 +119,21 @@ class pix2pixHD_network(object):
 		fake_B = self.generator_output(self.image_A)
 		fake_output_D = self.discriminator_output(fake_B)
 		real_output_D = self.discriminator_output(self.image_B)		
+		
 		self.d_loss = tf.reduce_mean(-(tf.log(real_output_D + eps) + tf.log(1 - fake_output_D + eps)))     
 		self.g_loss_l1= self.l1_Weight*tf.reduce_mean(tf.abs(fake_B - self.image_B))
 		self.g_loss_gan = tf.reduce_mean(-tf.log(fake_output_D + eps))
-		return self.d_loss, self.g_loss_l1 + self.g_loss_gan, self.g_loss_l1, self.g_loss_gan
+
+		self.g_loss_mse = self.L2_Weight*tf.reduce_mean(tf.square(fake_B-self.image_B))
+
+		return self.d_loss, self.g_loss_l1 + self.g_loss_gan, self.g_loss_l1, self.g_loss_gan, self.g_loss_mse
 
 	def load_initial_weights(self, session):
 		# Load the weights into memory: this approach is adopted rather than standard random initialization to allow the
 		# flexibility to load weights from a numpy file or other files.
 		if self.WEIGHTS_PATH:
 			print('loading initial weights from '+ self.WEIGHTS_PATH)
-			weights_dict = np.load(self.WEIGHTS_PATH, encoding = 'bytes').item()    
+			weights_dict = np.load(self.WEIGHTS_PATH, encoding = 'bytes').item()  
 		# else:
 		# 	print 'loading random weights'
 		# 	weights_dict = get_random_weight_dictionary('pix2pix_initial_weights')

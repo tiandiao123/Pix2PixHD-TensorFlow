@@ -63,6 +63,6 @@ def residual_block(x, filter_height, filter_width, num_outputs, stride_y, stride
 	weights_2 = get_scope_variable(name, 'weights_2', shape=[filter_height, filter_width, input_channels, num_outputs], \
 		initialvals=tf.random_normal_initializer(0, 0.02))
 
-	conved_output = tf.nn.conv2d(activation_layer, weights_2, strides=[1,strides_y, stride_x, 1], padding = padding)
+	conved_output = tf.nn.conv2d(activation_layer, weights_2, strides=[1, strides_y, stride_x, 1], padding = padding)
 
 	return conved_output

@@ -37,11 +37,17 @@ def load_images_paired(img_names,is_train=True, true_size = 256, enlarge_size = 
   return A_imgs,B_imgs
 
 def read_frame(file_path, crop=False, ih=0, iw=0, resize=False, rh=0, rw=0, norm=True, bias=1, crop_h_flag=0, args=None):
+  # print(file_path)
   f = cv2.imread(file_path)
   f = np.array(f)
   f = f.astype(np.float32)
   if norm:
       f = f / 127.5 - bias
+  # print("resize value : " + str(resize))
+  # print("resize_image_flag : " + str(args.need_resize))
+  if resize == False:
+    return f
+  
   if crop:
       if not crop_h_flag:
           down_px = 0 # gimp: 380-1100
@@ -109,6 +115,7 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
         IMAGE_HEIGHT = args.resize_h
 
         out_x = np.zeros( (IMAGE_HEIGHT, IMAGE_WIDTH, 3*3*args.frame_count)) # channel concatenate.
+        out_y = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3))
 
         # image_index = pair_element[0]
         # folder_index = pair_element[1]
@@ -184,19 +191,19 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
 
             PNCC_folder_path = os.path.join(sample_folder_full, 'PNCC')
             extract_image_path = PNCC_folder_path + "/p_" + str(image_extract_id) + ".png"
-            out_x[ :, :, i*9:i*9+3] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+            out_x[ :, :, i*9:i*9+3] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=args.need_resize, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
             
 
 
             dtex_folder_path = os.path.join(sample_folder_full, '3dTex')
             extract_image_path = dtex_folder_path + "/t_" + str(image_extract_id) + ".png"
-            out_x[ :, :, i*9+3:i*9+6] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+            out_x[ :, :, i*9+3:i*9+6] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=args.need_resize, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
 
             densepose_folder_path = os.path.join(sample_folder_full, 'densepose')
             extract_image_path = densepose_folder_path + "/f_" + str(image_extract_id) + "_IUV.png"
-            out_x[ :, :, i*9+6:i*9+9] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+            out_x[ :, :, i*9+6:i*9+9] =  read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=args.need_resize, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
 
 
@@ -205,7 +212,7 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
             face_folder_path = os.path.join(sample_folder_full, 'face')
             extract_image_path = face_folder_path + "/f_" + str(target_image_index) + ".png"
 
-            out_y = read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=True, \
+            out_y = read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=args.need_resize, \
                 rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
 
             # out_x = tf.convert_to_tensor(out_x, np.float32)
@@ -218,7 +225,7 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
             # out_x = tf.convert_to_tensor(out_x, np.float32)
 
             #out_x = out_x.eval()
-            return (out_x, )
+            return (out_x, out_y)
 
 def load_images_paired2(args, cur_index, batch_size, image_size, frame_count, train_list):
   A_imgs = np.zeros((batch_size,image_size,image_size,9*args.frame_count)) # ASSUMING RGB FOR NOW
@@ -226,6 +233,7 @@ def load_images_paired2(args, cur_index, batch_size, image_size, frame_count, tr
 
 
   for batch_id in range(batch_size):
+    print(cur_index+batch_id)
     image_index = train_list[cur_index+batch_id][1]
     folder_index = train_list[cur_index+batch_id][0]
     target_image_index = train_list[cur_index+batch_id][2]
@@ -236,29 +244,6 @@ def load_images_paired2(args, cur_index, batch_size, image_size, frame_count, tr
 
 
   return A_imgs, B_imgs
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
