@@ -1,9 +1,8 @@
+# pix2pixHD-TF
+
 * [Pix2PixHD model for style transfer](https://github.com/tiandiao123/Pix2PixHD-TensorFlow)
 
-  I implemented a Pix2Pix HD model for style transfer, that is transferring a image from one style to another style. Howerver, my impelmentation is highly correlated with the data set I use, so you need to change data pipeline by yourself so that that model can be applied into your project. 
-  
-# pix2pixHD-TF
-A minimal tensorflow implementation of pix2pixHD (https://tcwang0509.github.io/pix2pixHD/).
+  I implemented a Pix2Pix HD model for style transfer, that is transferring a image from one style to another style. Howerver, my impelmentation is highly correlated with the data set I use, so you need to change data pipeline by yourself so that that model can be applied into your project. Here is a tensorflow implementation of pix2pixHD (https://tcwang0509.github.io/pix2pixHD/).
 my codes started from original pix2pix implementation based on https://github.com/prashnani/pix2pix-tensorflow
 
 
