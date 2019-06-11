@@ -8,7 +8,7 @@ import cv2
 
 folder_names = ['densepose', 'PNCC', '3dTex', 'face']
 base_name = '/data1/cuiqingli/data/render_v5/unzipV3'
-save_base_name = '/data1/cuiqingli/data/render_v5/denseposeV4_256'
+save_base_name = '/data1/cuiqingli/data/render_v5/denseposeV4_512'
 def handler(folder_id):
 	dirname = os.path.join(base_name, str(folder_id))
 	save_dirname = os.path.join(save_base_name, str(folder_id))
@@ -28,7 +28,7 @@ def handler(folder_id):
 				down_px = 0
 				read_image = read_image[400-down_px :1120- down_px , 0:720]
 
-				read_image = cv2.resize(read_image, (256, 256))
+				read_image = cv2.resize(read_image, (512, 512))
 				save_image_path = os.path.join(save_folder_path, file)
 				print(save_image_path)
 				cv2.imwrite(save_image_path, read_image)
@@ -48,4 +48,8 @@ lines = [i+1 for i in range(100)]
 
 pool = Pool(42)
 pool.map(handler, lines)
+
+
+
+
 

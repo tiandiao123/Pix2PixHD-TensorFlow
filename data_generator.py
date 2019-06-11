@@ -47,6 +47,8 @@ def read_frame(file_path, crop=False, ih=0, iw=0, resize=False, rh=0, rw=0, norm
   # print("resize_image_flag : " + str(args.need_resize))
   if resize == False:
     return f
+
+
   
   if crop:
       if not crop_h_flag:
@@ -72,6 +74,7 @@ def read_frame(file_path, crop=False, ih=0, iw=0, resize=False, rh=0, rw=0, norm
 
 
       elif crop_h_flag in [10, 20, 21, 30]:
+          print("getting crop_h_flag: ", str(args.crop_h_flag))
 
           # f = f[args.crop_pos_x:(args.crop_pos_x+args.crop_scale_h), args.crop_pos_y:(args.crop_pos_y+args.crop_scale_w)]
           f_cache = np.zeros((args.crop_scale_h, args.crop_scale_w, 3), dtype=float)
@@ -127,6 +130,7 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
         if crop_h_flag == 20:
             # read json f1
             i_file_j = sample_folder_full+'/json/j_1.json'
+            # print("get json file: " + i_file_j)
 
             fp = open(i_file_j, 'r')
             f_content = fp.read()

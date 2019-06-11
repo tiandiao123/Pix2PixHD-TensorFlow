@@ -1,0 +1,327 @@
+import os
+import numpy as np
+import tensorflow as tf
+from datetime import datetime
+import time
+import glob
+from data_generator import *
+from pix2pix_network import pix2pix_network
+from random import shuffle
+import skimage.io as io
+import os
+import argparse
+from .pair_generator import PairGenerator, Inputs
+from .tf_data import Dataset
+
+curr_path = os.getcwd()
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--epochs", dest='num_epochs', type=int, default=200, help="specify number of epochs")
+parser.add_argument("--lr", dest='lr', type=float, default=0.0002, help="specify learning rate")
+parser.add_argument("--dropout", dest='dropout_rate', type=float, default=0.5, help="specify dropout")
+parser.add_argument("--dataset", dest='dataset_name', type=str, default='facades', help="specify dataset name")
+parser.add_argument("--train_image_path", dest='train_image_path', type=str, help="specify path to training images")
+parser.add_argument("--test_image_path", dest='test_image_path', type=str, help="specify path to test images")
+parser.add_argument("--crop_size", dest='input_size', type=int, default=256, help="specify crop size of the final jittered input (sec.6.2 of the pix2pix paper https://arxiv.org/pdf/1611.07004.pdf)")
+parser.add_argument("--enlarge_size", dest='enlarge_size', type=int, default=286, help="specify enlargement size from which to generate jittered input (sec.6.2 of the pix2pix paper https://arxiv.org/pdf/1611.07004.pdf)")
+parser.add_argument("--out_dir", dest='out_dir', type=str, default=curr_path+'/test_outputs/', help="specify path to training images")
+parser.add_argument("--checkpoint_name", dest='checkpoint_name', type=str, help="specify the checkpoint")
+parser.add_argument("--mode", dest='mode', type=str, help="specify the checkpoint")
+parser.add_argument("--checkpoint_name_preamble", dest='checkpoint_name_preamble', default='', type=str, help="specify the initial naming string for checkpoint name")
+parser.add_argument('--dataroot', type=str, default='../data', help='path to training data')
+parser.add_argument('--sample_st', type=int, default=-1)
+parser.add_argument('--sample_ed', type=int, default=-1)
+parser.add_argument('--frame_count', type=int, default=-1)
+parser.add_argument('--batch_size', type=int, default=4, help='gen and disc batch size')
+
+
+
+# -------------------------------------------- data and training set --------------------------------------
+parser.add_argument('--n_training_samples', type=int, default=80)
+# parser.add_argument('--crop_and_resize', action='store_true', help='center crop and resize input')
+parser.add_argument('--resize_w', type=int, default=256)
+parser.add_argument('--resize_h', type=int, default=256)
+
+# parser.add_argument('--h_crop', action='store_true', help='horizental center crop, if not set, default is original fix crop')
+
+parser.add_argument('--no_crop', action='store_true', help='no crop')
+parser.add_argument('--no_resize', action='store_true', help='no resize')
+
+parser.add_argument('--n_frame_total', type=int, default=8, help='num of frames in a loader')
+parser.add_argument('--n_frame_G', type=int, default=3)
+parser.add_argument('--n_frame_D', type=int, default=3)
+
+parser.add_argument('--pre_padding', action='store_true', help='auto padding (n_frame_total-1) frames ahead')
+
+parser.add_argument('--crop_h_flag', type=int, default=0, help='0 : pos(420, 0) scale(720, 720), 10: args.crop_pos args.crop_scale, 20: json auto')
+parser.add_argument('--crop_pos_x', type=int, default=420 )
+parser.add_argument('--crop_pos_y', type=int, default=0 )
+parser.add_argument('--crop_scale_h', type=int, default=720 )
+parser.add_argument('--crop_scale_w', type=int, default=720 )
+
+parser.add_argument('--scale_aug', action='store_true', help='scale random augmentation')
+parser.add_argument('--position_aug', action='store_true', help='position random augmentation')
+parser.add_argument('--position_aug_range', type=int, default=300, help='max pixels to shift')
+parser.add_argument('--scale_aug_range', type=float, default=1.5, help='max times for up/down scale')
+parser.add_argument('--scale', type=float, default=1.0, help='a para cache')
+
+# -------------------------------------------- save path and gpu id -----------------------------------
+parser.add_argument('--log_path', type=str, default='../log', help='path of logs')
+parser.add_argument('--ckpt_path', type=str, default='../checkpoint', help='path of ckpts')
+parser.add_argument('--model_name', type=str, default='auto', help='folder name to save weights')
+parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
+
+# -------------------------------------------- global parameters -----------------------------------
+parser.add_argument('--img_width', type=int, default=720)
+parser.add_argument('--img_height', type=int, default=1280)
+
+# -------------------------------------------- model setting ---------------------------------
+parser.add_argument('--ngf', type=int, default=64)
+parser.add_argument('--padding_type', type=str, default='reflect', help='reflect/replicate/zero')
+
+# -------------------------------------------- training configurations ---------------------------------
+parser.add_argument('--iter', type=int, default=0, help='number of iterations for training')
+parser.add_argument('--pretrain_iter', type=int, default=0, help='number of iterations for pre-train')
+parser.add_argument('--epoch', type=int, default=0, help='number of epochs for training')
+
+parser.add_argument('--generatorLR', type=float, default=0.0001, help='learning rate for generator')
+parser.add_argument('--model_save_interval', type=int, default=10000, help='save weights interval -> step record')
+parser.add_argument('--model_save_interval_replace', type=int, default=1000, help='save weights interval -> latest')
+parser.add_argument('--display_interval', type=int, default=1000, help='display images interval')
+parser.add_argument('--content_loss_type', type=str, default='mse', help='mse//l1')
+parser.add_argument('--base_arch', type=str, default='pix_global', help='unet/pix_global')
+
+parser.add_argument('--use_dropout', action='store_true')
+parser.add_argument('--drop_rate', type=float, default=0.5)
+
+# DI
+parser.add_argument('--discriminatorLR', type=float, default=0.0001, help='learning rate for discriminator')
+parser.add_argument('--discriminator_lambda', type=float, default=0.01, help='LAMBDA for adv loss')
+parser.add_argument('--adv_loss_type', type=str, default='mse', help='mse/bce')
+
+
+
+# -------------------------------------------- pre-load parameters -------------------------------------
+parser.add_argument('--generator_weights', type=str, default='', help='path to generator weights to continue training')
+parser.add_argument('--continue_iter', type=int, default=0, help='number of iterations for previous training')
+parser.add_argument('--continue_epoch', type=int, default=0, help='number of epochs for previous training')
+
+parser.add_argument('--discriminatorI_weights', type=str, default='', help='path to discriminatorI weights to continue training')
+parser.add_argument('--continue_gan_iter', type=int, default=0, help='number of iterations for previous training')
+
+# -------------------------------------------- inference configurations ---------------------------------
+parser.add_argument('--infer_out_root', type=str, default='./infer_res', help='results root folder of inference')
+parser.add_argument('--to_vid', action='store_true', help='convert output images to videos')
+parser.add_argument('--old_single_frame_dataloader_debug', action='store_true', help='-1 ~ -0.5 in dataloader and vid_infer')
+
+parser.add_argument('--no_gt', action='store_true', help='do not load gt folder')
+parser.add_argument('--remain_frames', action='store_true', help='remain frames after generating videos')
+
+parser.add_argument('--test_vid_ind_st', type=int, default=80)
+parser.add_argument('--test_vid_ind_ed', type=int, default=100)
+
+args = parser.parse_args()
+
+
+
+
+def ff_to_vid(in_folder, in_format, out_file, resolution=256):
+    if resolution==256: 
+        b_rate = 2000000 
+    elif resolution==512:
+        b_rate = 4000000
+    else:
+        raise NotImplementError('Resolution %d is not supported now.'%(resolution))
+
+    cmd = 'ffmpeg -i {}/{} -pix_fmt yuv420p -b:v {} {} -y'.format(in_folder, in_format, b_rate, out_file)
+    os.system(cmd)
+
+
+    
+def test(args):
+	######## data IO
+	out_dir = args.out_dir	
+	test_image_names = glob.glob(args.test_image_path+'/*.jpg')	
+	if not os.path.isdir(out_dir): os.mkdir(out_dir)
+	# TF placeholder for graph input
+	image_A = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
+	image_B = tf.placeholder(tf.float32, [None, args.input_size, args.input_size, 3])
+	keep_prob = tf.placeholder(tf.float32)
+	# Initialize model
+	model = pix2pix_network(image_A,image_B,args.batch_size,keep_prob, weights_path='')
+	# Loss
+	D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
+	# Initialize a saver
+	saver = tf.train.Saver(max_to_keep=None)
+	# Config
+	config = tf.ConfigProto()
+	config.gpu_options.allow_growth = True
+	config.allow_soft_placement = True
+	######### Start training
+	with tf.Session(config=config) as sess: 
+		with tf.device('/gpu:0'):
+			# Initialize all variables and start queue runners	
+			sess.run(tf.local_variables_initializer())
+			sess.run(tf.global_variables_initializer())
+			# To continue training from one of the checkpoints
+			if not args.checkpoint_name:
+				raise IOError('In test mode, a checkpoint is expected.')
+			saver.restore(sess, args.checkpoint_name)
+
+			# Test network
+			print 'generating network output'
+			for curr_test_image_name in test_image_names:			
+				splits = curr_test_image_name.split('/')
+				splits = splits[len(splits)-1].split('.')
+				print curr_test_image_name
+				batch_A,batch_B = load_images_paired(list([curr_test_image_name]),
+					is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
+				fake_B = sess.run(model.generator_output(image_A), 
+					feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})				
+				io.imsave(out_dir+splits[0]+'_test_output_fakeB.png',(fake_B[0]+1.0)/2.0)
+				io.imsave(out_dir+splits[0]+'_realB.png',(batch_B[0]+1.0)/2.0)
+				io.imsave(out_dir+splits[0]+'_realA.png',(batch_A[0]+1.0)/2.0)
+
+def train(args):
+	######## data IO
+	dataset_name = args.dataset_name
+	image_names = glob.glob(args.train_image_path+'/*.jpg')
+	shuffle(image_names)	
+	test_image_names = glob.glob(args.test_image_path+'/*.jpg')
+
+	######## Training variables
+	num_epochs = args.num_epochs
+	lr = args.lr	
+	batch_size = args.batch_size
+	total_train_images = len(image_names)
+	num_iters_per_epoch = total_train_images/args.batch_size
+	input_h = args.input_size
+	input_w = args.input_size	
+	dataset_name = args.dataset_name
+
+	######### Prep for training
+	# Path for tf.summary.FileWriter and to store model checkpoints
+	filewriter_path = curr_path+'/'+dataset_name+'_'+args.checkpoint_name_preamble+"_pix2pix_training_info2/TBoard_files"
+	checkpoint_path = curr_path+'/'+dataset_name+'_'+args.checkpoint_name_preamble+"_pix2pix_training_info2/"
+	out_dir = checkpoint_path+'sample_outputs/'
+	if not os.path.isdir(checkpoint_path): os.mkdir(checkpoint_path)
+	if not os.path.isdir(filewriter_path): os.mkdir(filewriter_path)
+	if not os.path.isdir(out_dir): os.mkdir(out_dir)
+
+	# TF placeholder for graph input
+	image_A = tf.placeholder(tf.float32, [None, input_h, input_w, 3])
+	image_B = tf.placeholder(tf.float32, [None, input_h, input_w, 3])
+	keep_prob = tf.placeholder(tf.float32)
+
+	# Initialize model
+	model = pix2pix_network(image_A,image_B,batch_size,keep_prob, weights_path='')
+
+	# Loss
+	D_loss, G_loss, G_loss_L1, G_loss_GAN = model.compute_loss()
+
+	# Summary
+	tf.summary.scalar("D_loss", D_loss)
+	tf.summary.scalar("G_loss_GAN", G_loss_GAN)
+	tf.summary.scalar("G_loss_L1", G_loss_L1)
+	merged = tf.summary.merge_all()
+
+	# Optimization
+	D_vars = [v for v in tf.trainable_variables() if v.name.startswith("dis_")]
+	D_train_op = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5).minimize(D_loss, var_list=D_vars)
+	with tf.control_dependencies([D_train_op]):
+		G_vars = [v for v in tf.trainable_variables() if v.name.startswith("gen_")]
+		G_train_op = tf.train.AdamOptimizer(learning_rate=lr, beta1=0.5).minimize(G_loss, var_list=G_vars)		
+
+	# Initialize a saver and summary writer
+	saver = tf.train.Saver(max_to_keep=None)
+
+	# Config
+	config = tf.ConfigProto()
+	config.gpu_options.allow_growth = True
+	config.allow_soft_placement = True
+
+	######### Start training
+	with tf.Session(config=config) as sess: 
+		with tf.device('/gpu:0'):
+
+			# Initialize all variables and start queue runners	
+			sess.run(tf.local_variables_initializer())
+			sess.run(tf.global_variables_initializer())
+			threads = tf.train.start_queue_runners(sess=sess)
+			train_writer = tf.summary.FileWriter(filewriter_path + '/train', sess.graph)
+
+			# To continue training from one of the checkpoints
+			if args.checkpoint_name:
+				saver.restore(sess, args.checkpoint_name)
+			
+			start_time = time.time()
+			# Loop over number of epochs
+			start_epoch = 0
+			for epoch in range(start_epoch,num_epochs):
+
+				print "{} epoch: {}".format(datetime.now(), epoch)
+				
+				step = 0
+				# Loop over iterations of an epoch
+				D_loss_accum = 0.0
+				G_loss_L1_accum = 0.0
+				G_loss_GAN_accum = 0.0
+
+				# Test network
+				print 'generating network output'
+				curr_test_image_name = np.random.choice(test_image_names, 1)
+				batch_A,batch_B = load_images_paired(curr_test_image_name,is_train = False, true_size = args.input_size, enlarge_size = args.enlarge_size)
+				fake_B = sess.run(model.generator_output(image_A), feed_dict=
+					{image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
+				print curr_test_image_name[0][:-4]
+				splits = curr_test_image_name[0].split('/')
+				splits = splits[len(splits)-1].split('.')
+				io.imsave(out_dir+splits[0]+'_epoch_'+str(epoch)+'.png',(np.concatenate(((batch_A[0]+1.0)/2.0,(batch_B[0]+1.0)/2.0,(fake_B[0]+1.0)/2.0),axis = 1)))
+
+				for iter in np.arange(0,len(train_list),batch_size):
+
+					# Get a batch of images (paired)				
+					curr_image_names = image_names[iter*batch_size:(iter+1)*batch_size]
+					batch_A,batch_B = load_images_paired(curr_image_names,is_train = True, true_size = args.input_size, enlarge_size = args.enlarge_size)
+
+					# One training iteration
+					summary, _, D_loss_curr_iter, G_loss_L1_curr_iter, G_loss_GAN_curr_iter = sess.run([merged, G_train_op, D_loss, G_loss_L1, G_loss_GAN], feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32'), keep_prob: 1-args.dropout_rate})
+					# Record losses for display
+					G_loss_L1_accum = G_loss_L1_accum + G_loss_L1_curr_iter
+					G_loss_GAN_accum = G_loss_GAN_accum + G_loss_GAN_curr_iter
+					D_loss_accum = D_loss_accum + D_loss_curr_iter
+					train_writer.add_summary(summary, epoch*len(image_names)/batch_size + iter)
+					step += 1			
+				
+				end_time = time.time()
+				print 'elapsed time for epoch '+str(epoch)+' = '+str(end_time-start_time)
+				epoch = epoch+1
+				G_loss_L1_accum = G_loss_L1_accum/num_iters_per_epoch
+				G_loss_GAN_accum = G_loss_GAN_accum/num_iters_per_epoch
+				D_loss_accum = D_loss_accum/num_iters_per_epoch
+
+				print "G loss L1: "+str(G_loss_L1_accum)
+				print "G loss GAN: "+str(G_loss_GAN_accum)
+				print "D loss: "+str(D_loss_accum)
+
+				# Save the most recent model
+				for f in glob.glob(checkpoint_path+"model_epoch"+str(epoch-1)+"*"):
+					os.remove(f)
+				checkpoint_name = os.path.join(checkpoint_path, 'model_epoch'+str(epoch)+'.ckpt')
+				save_path = saver.save(sess, checkpoint_name)		
+
+			train_writer.close()
+
+
+
+
+def main(args):
+	if args.mode == 'train':
+		train(args)
+	if args.mode == 'test':
+		test(args)
+	else:
+		raise 'mode input should be train or test.'
+
+if __name__ == '__main__':
+    main(args)

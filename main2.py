@@ -20,6 +20,7 @@ import os
 import argparse
 from pair_generator import PairGenerator, Inputs
 from tf_data import Dataset
+from random import randint
 
 curr_path = os.getcwd()
 
@@ -200,7 +201,7 @@ def test(args):
 
 
     with tf.Session(config=config) as sess: 
-        with tf.device('/gpu:6'):
+        with tf.device('/gpu:'+str(args.gpu_ids)):
             # Initialize all variables and start queue runners  
             sess.run(tf.local_variables_initializer())
             sess.run(tf.global_variables_initializer())
@@ -261,7 +262,7 @@ def test(args):
                         unstack_fake_B = unstack_fake_B[:,:,(2,1,0)]
 
                         img1 = scipy.misc.toimage((unstack_fake_B+1)*127.5)
-                        img1.save(pred_folder+'/%04d.png'%(count+1))
+                        img1.save(pred_folder+'/%04d.png'%(count))
 
                         print("folder {}'s image {}'s generator loss is : ".format(str(folder_id), str(count), str(cur_g_loss)))
 
@@ -389,14 +390,19 @@ def train(args):
                     print("the iteration {} of epcoh {}'s for pretrain G_loss_mse is: {}".format(str(step), str(epoch), str(average_g_loss_mse)))
 
                     if step%500 == 0:
-                        inf_batch_A, inf_batch_B = load_images_paired2(args, 0, batch_size, image_size, frame_count, inference_image_list)
+                        random_id = randint(0, len(inference_image_list)-batch_size-1)
+                        inf_batch_A, inf_batch_B = load_images_paired2(args, random_id, batch_size, image_size, frame_count, inference_image_list)
 
                         fake_B = sess.run([generator_image], feed_dict={image_A: inf_batch_A.astype('float32'), image_B: inf_batch_B.astype('float32'), keep_prob: 0.5})
                         print(type(fake_B))
                         fake_B = np.array(fake_B)
                         print(fake_B.shape)
-                        img1 = scipy.misc.toimage((fake_B[0][0]+1)*127.5)
+                        img1 = scipy.misc.toimage((fake_B[0][0][:,:,(2,1,0)]+1)*127.5)
                         img1.save('./sample_images/epoch{}_step{}_preTrain.png'.format(str(epoch), str(step)))
+
+
+                checkpoint_name = os.path.join(checkpoint_path, args.model_name + '/pretrain_model_epoch'+str(epoch)+'.ckpt')
+                save_path = saver.save(sess, checkpoint_name) 
 
 
 
@@ -432,19 +438,18 @@ def train(args):
                     step += 1
 
                     if step%500 == 0:
-                        inf_batch_A, inf_batch_B = load_images_paired2(args, 0, batch_size, image_size, frame_count, inference_image_list)
+                        random_id = randint(0, len(inference_image_list)-batch_size)
+                        inf_batch_A, inf_batch_B = load_images_paired2(args, randint, batch_size, image_size, frame_count, inference_image_list)
                         fake_B = sess.run([generator_image], feed_dict={image_A: inf_batch_A.astype('float32'), image_B: inf_batch_B.astype('float32'), keep_prob: 0.5})
                         print(type(fake_B))
                         fake_B = np.array(fake_B)
                         fake_B = fake_B[0][0]
-                        img1 = scipy.misc.toimage((fake_B+1)*127.5)
+                        img1 = scipy.misc.toimage((fake_B[:,:,(2,1,0)]+1)*127.5)
                         img1.save('./sample_images/epoch{}_step{}_ganTrain.png'.format(str(epoch), str(step)))
                 
                 end_time = time.time()
 
                 # Save the most recent model
-                for f in glob.glob(checkpoint_path+args.model_name + "/model_epoch"+str(epoch-1)+"*"):
-                    os.remove(f)
                 checkpoint_name = os.path.join(checkpoint_path, args.model_name + '/model_epoch'+str(epoch)+'.ckpt')
                 save_path = saver.save(sess, checkpoint_name)       
 
