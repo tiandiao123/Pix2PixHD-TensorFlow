@@ -264,7 +264,7 @@ def test(args):
                         unstack_fake_B = fake_B[inner_id]
                         unstack_fake_B = unstack_fake_B[:,:,(2,1,0)]
 
-                        img1 = scipy.misc.toimage((unstack_fake_B+1)*127.5)
+                        img1 = scipy.misc.toimage(unstack_fake_B, cmin=-1, cmax=1)
                         img1.save(pred_folder+'/%04d.png'%(count))
 
                         print(batch_B[inner_id])
