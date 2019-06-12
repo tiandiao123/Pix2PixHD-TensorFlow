@@ -221,7 +221,8 @@ def test(args):
             generator_image =  tf.get_default_graph().get_tensor_by_name('Tanh:0')
             image_A = tf.get_default_graph().get_tensor_by_name('Placeholder:0')
             image_B = tf.get_default_graph().get_tensor_by_name('Placeholder_1:0')
-            G_loss = tf.get_default_graph().get_tensor_by_name('G_loss_GAN:0')
+            G_loss_GAN = tf.get_default_graph().get_tensor_by_name('G_loss_GAN:0')
+            G_loss_L1 = tf.get_default_graph().get_tensor_by_name('G_loss_L1:0')
 
 
             # Test network
@@ -249,8 +250,10 @@ def test(args):
                         break
                     batch_A, batch_B = load_images_paired2(args, iter_id, args.batch_size, image_size, frame_count, test_list)
 
-                    fake_B, cur_g_loss = sess.run([generator_image, G_loss], \
+                    fake_B, cur_g_loss_gan, cur_g_loss_l1 = sess.run([generator_image, G_loss_GAN, G_loss_L1], \
                         feed_dict={image_A: batch_A.astype('float32'), image_B: batch_B.astype('float32')})
+                    # print(cur_g_loss_gan)
+                    # print(cur_g_loss_l1)
 
                     for inner_id in range(args.batch_size):
                         count+=1
@@ -264,7 +267,12 @@ def test(args):
                         img1 = scipy.misc.toimage((unstack_fake_B+1)*127.5)
                         img1.save(pred_folder+'/%04d.png'%(count))
 
-                        print("folder {}'s image {}'s generator loss is : ".format(str(folder_id), str(count), str(cur_g_loss)))
+                        print(batch_B[inner_id])
+
+                        cur_g_loss_mse = np.sum(np.square(fake_B[inner_id] - batch_B[inner_id]))
+                        cur_g_loss_mse /= (args.resize_w * args.resize_h)
+
+                        print("folder {}'s image {}'s generator loss is : {}".format(str(folder_id), str(count), str(cur_g_loss_mse)))
 
                 
                 # images = [img for img in os.listdir(pred_folder) if img.endswith(".png")]
@@ -439,7 +447,7 @@ def train(args):
 
                     if step%500 == 0:
                         random_id = randint(0, len(inference_image_list)-batch_size)
-                        inf_batch_A, inf_batch_B = load_images_paired2(args, randint, batch_size, image_size, frame_count, inference_image_list)
+                        inf_batch_A, inf_batch_B = load_images_paired2(args, random_id, batch_size, image_size, frame_count, inference_image_list)
                         fake_B = sess.run([generator_image], feed_dict={image_A: inf_batch_A.astype('float32'), image_B: inf_batch_B.astype('float32'), keep_prob: 0.5})
                         print(type(fake_B))
                         fake_B = np.array(fake_B)
@@ -450,8 +458,10 @@ def train(args):
                 end_time = time.time()
 
                 # Save the most recent model
+                for f in glob.glob(checkpoint_path+args.model_name + "/model_epoch"+str(epoch-1)+"*"):
+                    os.remove(f)
                 checkpoint_name = os.path.join(checkpoint_path, args.model_name + '/model_epoch'+str(epoch)+'.ckpt')
-                save_path = saver.save(sess, checkpoint_name)       
+                save_path = saver.save(sess, checkpoint_name)            
 
             train_writer.close()
 

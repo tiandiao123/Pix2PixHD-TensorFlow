@@ -226,9 +226,12 @@ def read_image_and_resize(args, folder_index, image_index, target_image_index):
             return (out_x, out_y)
         else:
 
-            # out_x = tf.convert_to_tensor(out_x, np.float32)
+            face_folder_path = os.path.join(sample_folder_full, 'face')
+            extract_image_path = face_folder_path + "/f_" + str(target_image_index) + ".png"
+            if os.path.isfile(extract_image_path):            
+              out_y = read_frame(extract_image_path, crop=not args.no_crop, ih=args.img_height, iw=args.img_width, resize=args.need_resize, \
+                  rh=IMAGE_HEIGHT, rw=IMAGE_WIDTH, bias=1, crop_h_flag=crop_h_flag, args=args)
 
-            #out_x = out_x.eval()
             return (out_x, out_y)
 
 def load_images_paired2(args, cur_index, batch_size, image_size, frame_count, train_list):
@@ -237,7 +240,7 @@ def load_images_paired2(args, cur_index, batch_size, image_size, frame_count, tr
 
 
   for batch_id in range(batch_size):
-    print(cur_index+batch_id)
+    # print(cur_index+batch_id)
     image_index = train_list[cur_index+batch_id][1]
     folder_index = train_list[cur_index+batch_id][0]
     target_image_index = train_list[cur_index+batch_id][2]
