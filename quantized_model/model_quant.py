@@ -208,7 +208,7 @@ def inference_lite(args):
             
             # inference 
             interpreter.set_tensor(input_index1, batch_A.astype(np.float32))
-
+            interpreter.invoke()
             fake_B = interpreter.get_tensor(output_index)
             count+=2
             
@@ -225,7 +225,7 @@ def inference_lite(args):
         
         time_cost = time.time() - start_time
         print ('[%s] Processed %d images in %.3fs . FPS=%.2f'%(args.model, count, time_cost, count/time_cost))
-        interpreter.invoke()
+        
      
         
 def inference(args):
