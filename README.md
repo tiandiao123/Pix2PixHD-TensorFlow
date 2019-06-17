@@ -7,7 +7,7 @@ my codes started from original pix2pix implementation based on https://github.co
 
 This code has been tested to work on the following environment:
 - Ubuntu 14.04
-- Tensorflow 0.11
+- Tensorflow 1.4
 - Python  3.6(Numpy, Scikit-image)
 - Cuda 8.0, CuDNN 7.0
 
@@ -23,7 +23,6 @@ cd pix2pix-TF
 python main2.py --dataroot /data1/cuiqingli/data/render_v5/denseposeV4_512 --sample_st 1 --sample_ed 80 --num_epochs 10 \
 --batch_size 2 --frame_count 11 --resize_w 512 --resize_h 512 --mode train --lr 0.0002 --model_name model512_denseposeV4_mse_0611 --gpu_ids 0  
 ```
-NOTE: For the generator, the U-net encoder-decoder is implemented. For the discriminator, a 70x70 discriminator is implemented. Both these choices have been experimentally proven to be the best compared to some of the alternatives by the authors of pix2pix. Also, as specified in the errata in the [pix2pix paper](https://arxiv.org/pdf/1611.07004.pdf) (Sec.6.3), batchnorm is removed from bottleneck layer. 
 
 4. Test
 ```
