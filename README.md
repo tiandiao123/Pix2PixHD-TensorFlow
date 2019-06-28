@@ -34,4 +34,9 @@ python main2.py --dataroot /data1/cuiqingli/app4_v2_1sec/result --sample_st 0 --
 ```
 python convert_video.py --sample_st 81 --sample_ed 82 --pred_folder /data1/cuiqingli/Pix2PixHD-TensorFlow/infer_res/model256_dneseposeV4_mse --resolution 256
 ```
+6. quantize model (post quantization which means quantizing trained float model) and inference by quantized model
+```
+python model_quant.py --dataroot='./datasets/' --model='quant' --batch_size = 2 --sample_st = 91 --sample_ed = 91 --epoch_id_inference = 9 \
+--model_name = 'model256_denseposeV4_mse_0610' --checkpoint_name = './checkpoints/model256_denseposeV4_mse_0610/'  --infer_out_root ='/infer_res'
+```
 
