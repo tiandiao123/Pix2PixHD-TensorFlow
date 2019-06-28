@@ -18,8 +18,6 @@ from random import shuffle
 import skimage.io as io
 import os
 import argparse
-from pair_generator import PairGenerator, Inputs
-from tf_data import Dataset
 from random import randint
 
 curr_path = os.getcwd()
