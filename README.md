@@ -13,8 +13,8 @@ This code has been tested to work on the following environment:
 
 1. Clone this repository:
 ```
-git clone https://github.com/prashnani/pix2pix-TF.git
-cd pix2pix-TF
+git clone https://github.com/tiandiao123/Pix2PixHD-TensorFlow
+cd Pix2PixHD-TensorFlow
 ```
 2. Dataset is not shared in public, but you can create a data set for yourself to train this Pix2PixHD model, there is many great data set online such as facades. 
 
